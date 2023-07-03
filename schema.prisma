@@ -18,12 +18,6 @@ model accounts {
   otp_key    String
   nick       String @db.VarChar(30)
   avatar_key String
-  game_stats Json
-
-  win_count    Int
-  lose_count   Int
-  tie_count    Int
-  skill_rating Int
 
   session                 sessions?    @relation("sessions", fields: [loggedin_session], references: [id])
   loggedin_session        Int?
@@ -55,8 +49,21 @@ model accounts {
   items    items[]
   sessions sessions[]
 
-  bans_account         bans[] @relation("bans_account")
-  bans_manager_account bans[] @relation("bans_manager_account")
+  bans_account         bans[]          @relation("bans_account")
+  bans_manager_account bans[]          @relation("bans_manager_account")
+  game_queue           game_queue?
+  game_members         game_members?
+  accounts_game        accounts_game[]
+}
+
+model accounts_game {
+  account      accounts @relation(fields: [account_id], references: [id])
+  account_id   Int      @id
+  game_stats   Json
+  win_count    Int
+  lose_count   Int
+  tie_count    Int
+  skill_rating Int
 }
 
 model friend {
@@ -145,18 +152,16 @@ model items {
   account_id      Int
   item_id         Int
   expire_datetime DateTime
-  attribute_flage Int
+  attribute_flag  Int
 }
 
 model sessions {
-  id         Int      @unique @default(autoincrement())
+  id         Int      @id @default(autoincrement())
   account    accounts @relation(fields: [account_id], references: [id])
   account_id Int
   identify   String
 
   accounts accounts[] @relation("sessions")
-
-  @@id([id, account_id])
 }
 
 model bans {
@@ -169,19 +174,46 @@ model bans {
   reason          String
   expire_datetime DateTime
   timestamp       DateTime
-  nemo            String
+  memo            String
 
   @@id([id, account_id, manager_account_id])
 }
 
-// model game_match_queue {
-// }
+model game_queue {
+  account      accounts @relation(fields: [account_id], references: [id])
+  account_id   Int      @id
+  skill_rating Int
+  timestamp    DateTime
+}
 
-// model games {
-// }
+model games {
+  id         Int      @id @default(autoincrement())
+  server_id  Int
+  timestamp  DateTime
+  game_mode  Int
+  field_id   Int
+  states     Json
+  statistics Json
 
-// model game_history {
-// }
+  game_members game_members[]
+}
+
+model game_members {
+  account    accounts @relation(fields: [account_id], references: [id])
+  account_id Int      @id
+  game       games    @relation(fields: [game_id], references: [id])
+  game_id    Int
+  options    Json
+  statistics Json?
+}
+
+model game_history {
+  id                 Int  @id @default(autoincrement())
+  game_mode          Int
+  field_id           Int
+  statistics         Json
+  members_statistics Json
+}
 
 enum ActiveStatus {
   OFFLINE
