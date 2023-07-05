@@ -54,16 +54,17 @@ model accounts {
   game_queue           game_queue?
   game_members         game_members?
   accounts_game        accounts_game[]
+  game_history         game_history[]
 }
 
 model accounts_game {
-  account      accounts @relation(fields: [account_id], references: [id])
-  account_id   Int      @id
-  game_stats   Json
-  win_count    Int
-  lose_count   Int
-  tie_count    Int
-  skill_rating Int
+  account         accounts @relation(fields: [account_id], references: [id])
+  account_id      Int      @id
+  game_statistics Json
+  win_count       Int
+  lose_count      Int
+  tie_count       Int
+  skill_rating    Int
 }
 
 model friend {
@@ -159,7 +160,7 @@ model sessions {
   id         Int      @id @default(autoincrement())
   account    accounts @relation(fields: [account_id], references: [id])
   account_id Int
-  identify   String
+  token      String
 
   accounts accounts[] @relation("sessions")
 }
@@ -208,7 +209,8 @@ model game_members {
 }
 
 model game_history {
-  id                 Int  @id @default(autoincrement())
+  id                 Int        @id @default(autoincrement())
+  accounts           accounts[]
   game_mode          Int
   field_id           Int
   statistics         Json
