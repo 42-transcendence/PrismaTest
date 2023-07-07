@@ -190,6 +190,8 @@ model game_queue {
 model games {
   id         Int      @id @default(autoincrement())
   server_id  Int
+  title      String
+  password   String
   timestamp  DateTime
   game_mode  Int
   field_id   Int
