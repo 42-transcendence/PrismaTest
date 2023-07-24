@@ -1,0 +1,7 @@
+FROM node:latest
+
+RUN npm install -g npm@9.8.0 @nestjs/cli
+COPY ./transendence /home/node/app
+WORKDIR /home/node/app
+RUN npm install;
+# CMD [ "npm", "run", "start:dev" ]
