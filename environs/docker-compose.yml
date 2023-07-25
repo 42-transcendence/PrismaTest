@@ -1,0 +1,84 @@
+services:
+  database:
+    container_name: postgres
+    image: postgres
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD_FILE: "/run/secrets/postgres_password"
+      POSTGRES_DB: "${POSTGRES_DB}"
+      POSTGRES_MEMBER_USER: ${POSTGRES_MEMBER_USER}
+      POSTGRES_MEMBER_PASSWORD_FILE: "/run/secrets/postgres_member_password"
+      POSTGRES_MEMBER_DB: "${POSTGRES_MEMBER_DB}"
+    restart: always
+    volumes:
+      - ./postgres/initdb.d:/docker-entrypoint-initdb.d
+      - database_volume:/var/lib/postgresql/data
+    networks:
+      - database_network
+    secrets:
+      - postgres_password
+      - postgres_member_password
+    hostname: postgreshost
+    expose:
+      - "5432"
+
+  pgadmin:
+    container_name: pgadmin
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: "${PGADMIN_EMAIL}"
+      PGADMIN_DEFAULT_PASSWORD_FILE: "/run/secrets/pgadmin_password"
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
+      PGADMIN_CONFIG_LOGIN_BANNER: "${PGADMIN_CONFIG_LOGIN_BANNER}"
+    depends_on:
+      - database
+    restart: always
+    volumes:
+      - ./postgres/pgadmin4-servers.json:/pgadmin4/servers.json
+      - dbadmin_volume:/var/lib/pgadmin
+    networks:
+      - http_network
+      - database_network
+    secrets:
+      - pgadmin_password
+    expose:
+      - "80"
+    ports:
+      - "5050:80"
+
+  nestjs:
+    depends_on:
+      - database
+    build: 
+      context: ./nestjs
+      dockerfile: dockerfile
+    container_name: nestjs
+    restart: always
+    environment:
+      - NODE_ENV=production
+    ports:
+      - 3000:3000
+    expose:
+      - "5432"
+    volumes:
+       - type: bind
+         source: ./nestjs/transendence
+         target: /home/node/app
+    networks:
+      - database_network
+
+networks:
+  http_network:
+  database_network:
+
+volumes:
+  database_volume:
+  dbadmin_volume:
+
+secrets:
+  postgres_password:
+    file: ./postgres/.secret.d/postgres_password.txt
+  postgres_member_password:
+    file: ./postgres/.secret.d/postgres_member_password.txt
+  pgadmin_password:
+    file: ./postgres/.secret.d/pgadmin_password.txt
