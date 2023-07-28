@@ -1,7 +1,9 @@
 // express, ws 객체 생성
 import * as ws from 'ws';
 import express from 'express';
-import * as http from 'http'
+import { IncomingMessage } from 'http'
+import { ChatSocket } from './ChatSocket';
+
 
 const app = express();
 
@@ -12,9 +14,10 @@ const httpServer = app.listen(3001, () => {
 const webSocketServer = new ws.Server({
   server: httpServer,
   clientTracking: true,
+  WebSocket: ChatSocket,
 });
 
-webSocketServer.on("connection", (ws : ws, request : http.IncomingMessage) => {
+webSocketServer.on("connection", (ws : ws, request : IncomingMessage) => {
   // wss 은 웹소켓 서버를 의미하고, 콜백 함수로 받아온 ws 는 연결된 클라이언트를 의미한다.
   // request: 클라이언트로 부터 전송된 http GET 리퀘스트 정보
   // 연결한 클라이언트 ip 확인
@@ -25,7 +28,7 @@ webSocketServer.on("connection", (ws : ws, request : http.IncomingMessage) => {
   // console.log(request);
   // console.log("\n\n\n\n\n");
   // console.log(ws);
-  console.log(webSocketServer.clients);
+  // console.log(webSocketServer.clients);
 
 
   // 연결이 성공

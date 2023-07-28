@@ -7,7 +7,9 @@
     <title>web socket</title>
   </head>
   <script>
-    const webSocket = new WebSocket("ws://localhost:3001");
+    import { ChatSocket } from './ChatSocket'
+
+    const webSocket = new ChatSocket(1, "ws://localhost:3001");
 
     // 웹 소켓 연결 이벤트
     webSocket.onopen = function () {
@@ -16,7 +18,9 @@
 
     // 웹 소켓 메세지 수신
     webSocket.onmessage = function (event) {
-      alert(event.data);
+      const prev_msg = window.localStorage.getItem('prev_msg');
+      alert(`prev_msg : ${prev_msg}, present_msg : ${event.data}`);
+      window.localStorage.setItem('prev_msg', event.data);
     };
 
     // 웹 소켓 연결 종료
