@@ -3,13 +3,15 @@ import { Server, WebSocket } from 'ws';
 import express from 'express';
 import { IncomingMessage } from 'http'
 import arrayBufferToString from './arrayBufferToString'
-import { commandCodeExtract, getLength } from './utils'
+import { BufType, commandCodeExtract, getLength } from './utils'
 
 const app = express();
 
-const httpServer = app.listen(3001, () => {
-  console.log("서버가 3001번 포트로 동작합니다.");
+const httpServer = app.listen(5000, () => {
+  console.log("서버가 5000번 포트로 동작합니다.");
 });
+
+// console.log(httpServer);
 
 const webSocketServer = new Server({
   server: httpServer,
@@ -27,17 +29,15 @@ webSocketServer.on("connection", (ws : WebSocket, request : IncomingMessage) => 
 
   // 메세지를 받았을 때 이벤트 처리
   ws.on("message", (msg : ArrayBuffer) => {
-    console.log(msg, arrayBufferToString(msg));
-    const commandCode =  commandCodeExtract(msg);
-    msg = msg.slice(1);
-    const length = getLength(msg);
-    msg = msg.slice(2);
-    console.log(`commandCode : ${commandCode} length : ${length}`)
-    for(let value of webSocketServer.clients)
-    {
-      if (value !== ws)
-        value.send(`${msg}`)
-    }
+    const msgBuf : BufType = { buf : msg }
+    const commandCode =  commandCodeExtract(msgBuf);
+    const length = getLength(msgBuf);
+    // console.log(`commandCode : ${commandCode} length : ${length} string : ${msgBuf.buf}`)
+    // for(let value of webSocketServer.clients)
+    // {
+    //   if (value !== ws)
+    //     value.send(`${msg}`)
+    // }
   });
 
   // 에러 처리

@@ -18,14 +18,15 @@
       return buf;
     }
 
-    const webSocket = new WebSocket("ws://localhost:3001");
+    const webSocket = new WebSocket("ws://localhost:5000");
 
     // 웹 소켓 연결 이벤트
     webSocket.onopen = function () {
       alert("웹소켓 서버와 연결에 성공했습니다.");
       const msg = 'hello world!'
       const b = stringToUnit8Array(msg);
-      webSocket.send(b.buffer);
+      console.log('Connected');
+        socket.send(JSON.stringify({event: 'events',data: 'test',}));
     };
 
     // 웹 소켓 메세지 수신
