@@ -5,7 +5,8 @@ import { Server, WebSocket, WebSocketServer } from 'ws';
 import express from 'express';
 import { IncomingMessage } from 'http';
 import arrayBufferToString from './utils/arrayBufferToString';
-import { BufType, commandCodeExtract, getLength } from './utils/utils';
+import { command } from './utils/utils';
+import { ChatSocket } from './utils/chatSocket';
 
 export class ChatService {
 
@@ -17,6 +18,7 @@ export class ChatService {
 				console.log("서버가 5000번 포트로 동작합니다.");
 			}),
 			clientTracking: true,
+			WebSocket : ChatSocket
 		});
 		if (this.webSocketServer)
 			this.webSocketServer.on("connection", (ws : WebSocket, request : IncomingMessage) => {
@@ -32,10 +34,8 @@ export class ChatService {
 				}
 		
 				// 메세지를 받았을 때 이벤트 처리
-				ws.on("message", (msg : any) => {
-					const msgBuf : BufType = { buf : msg }
-					const commandCode =  commandCodeExtract(msgBuf);
-					const length = getLength(msgBuf);
+				ws.on("message", (msg : Uint8Array) => {
+					command(msg, ws);
 				});
 		
 				// 에러 처리
