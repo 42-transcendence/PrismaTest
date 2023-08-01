@@ -10,13 +10,13 @@
       "MaintenanceDB": "jkong"
     },
     "2": {
-      "Name": "transcendence",
+      "Name": "transendence",
       "Group": "Servers",
       "Port": 5432,
-      "Username": "transcendence",
+      "Username": "transendence",
       "Host": "postgreshost",
       "SSLMode": "prefer",
-      "MaintenanceDB": "transcendence"
+      "MaintenanceDB": "transendence"
     }
   }
 }
