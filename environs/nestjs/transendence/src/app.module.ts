@@ -4,6 +4,7 @@ import { AppService } from './app.service';
 import { ChatModule } from './chat/chat.module';
 import { ConfigModule } from '@nestjs/config';
 import { CommandModule } from './command/command.module';
+import { NewChatModule } from './new-chat/new-chat.module';
 import authConfig from './config/authConfig';
 
 @Module({
@@ -15,7 +16,8 @@ import authConfig from './config/authConfig';
       // validationSchema,
     }),
     CommandModule,
-    ChatModule,],
+    ChatModule,
+    NewChatModule,],
   controllers: [AppController],
   providers: [AppService],
 })

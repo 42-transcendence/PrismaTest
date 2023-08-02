@@ -1,25 +1,26 @@
 // express, ws 객체 생성
-import { Server, WebSocket } from 'ws';
-import express from 'express';
-import { IncomingMessage } from 'http'
-import arrayBufferToString from './arrayBufferToString'
-import { BufType, commandCodeExtract, getLength } from './utils'
+import { Server} from 'ws';
+import { IncomingMessage, createServer } from 'http'
 import { ByteBuffer } from './byte-buffer';
 import { ChatWebSocket } from './ChatSocket';
 
-const app = express();
+const httpServer = createServer().listen(3000);
 
-const httpServer = app.listen(3001, () => {
-  console.log("서버가 3001번 포트로 동작합니다.");
-});
-
-// console.log(httpServer);
+httpServer.on('upgrade', function (request, socket, head) {
+  console.log('in!')
+  webSocketServer.handleUpgrade(request, socket, head, (ws) => {
+    console.log('upgrade')
+  })
+})
 
 const webSocketServer = new Server({
-  server: httpServer,
+  noServer : true,
   clientTracking: true,
   WebSocket: ChatWebSocket
 });
+
+console.log('out');
+
 
 // request: 클라이언트로 부터 전송된 http GET 리퀘스트 정보
 webSocketServer.on("connection", (ws : ChatWebSocket, request : IncomingMessage) => {
@@ -27,7 +28,6 @@ webSocketServer.on("connection", (ws : ChatWebSocket, request : IncomingMessage)
   // 연결이 성공
   if (ws.readyState === ws.OPEN) {
     console.log('연결되었습니다!');
-    // console.log('userId: ', ws.opt.userId);
   }
 
   // 메세지를 받았을 때 이벤트 처리

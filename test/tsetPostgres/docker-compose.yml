@@ -1,0 +1,25 @@
+services:
+  db:
+    container_name: postgresql
+    image: postgres
+    environment:
+      POSTGRES_USER: "iyun"
+      POSTGRES_PASSWORD: "1234"
+      POSTGRES_DB: "iyun"
+    restart: always
+    volumes:
+      - volume:/var/lib/postgresql/data
+    networks:
+      - network
+    expose:
+      - "5432"
+    ports:
+      - 5433:5432
+
+
+networks:
+  network:
+
+volumes:
+  volume:
+
