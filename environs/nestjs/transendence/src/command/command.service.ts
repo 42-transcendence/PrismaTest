@@ -3,127 +3,181 @@ import { ByteBuffer } from "libs/byte-buffer";
 import authConfig from "src/config/authConfig";
 import { ConfigType } from '@nestjs/config';
 import { Inject, Injectable } from "@nestjs/common";
-import { ChatWebSocket } from "src/chat/utils/chatSocket";
+import { ChatWebSocket } from "src/new-chat/chatSocket";
 import { jwtVerifyHMAC } from "libs/jwt";
 import { encodeUTF8 } from "libs/utf8";
 import { CustomException } from "src/chat/utils/exception";
-import { Chat, RoomCreateDTO } from "./commandUtils/utils";
-import { CreateChatMemberArray } from "./commandUtils/utils";
+import { ChatMemberWithChatUuid, ChatMessageWithChatUuid, ChatRightCode, ChatRoomMode, ChatWithoutIdUuid, CreateChatMemberArray, RoomInfo, readChatAndMemebers, writeChat, writeRoominfo, wrtieChats } from "./commandUtils/utils";
+import { ChatOpCode, ChatWithoutId } from "./commandUtils/utils";
+import { ChatEntity, ChatMemberEntity } from "src/generated/model";
 
-
-enum ChatOpCode {
-	Connect,
-	LoadFriendsList,
-	Create,
-	Enter,
-	PublicSearch,
-	Auth,
-	Join,
-	Part,
-	Chat,
-}
 
 @Injectable()
-export class CommandService
-{
-	constructor(private prismaService : PrismaService, @Inject(authConfig.KEY) private config: ConfigType<typeof authConfig>) {}
+export class CommandService {
+	constructor(private prismaService: PrismaService, @Inject(authConfig.KEY) private config: ConfigType<typeof authConfig>) { }
 
-	async command(msg : Uint8Array, ws : ChatWebSocket, clients : Map<ChatWebSocket, number>)
-	{
-		const msgBuf : ByteBuffer = ByteBuffer.from(msg);
-		const code : number = msgBuf.read1();
-		const socketUserId : number = Number(clients.get(ws));
-		console.log(code);
-		try
-		{	if (code == ChatOpCode.Connect)
-				await this.ChatServerConnect(ws, clients);
-			else if (code == ChatOpCode.Create)
-				await this.CreateRoom(msgBuf, ws, socketUserId);
-			else if (code == ChatOpCode.Enter)
-				await this.EnterRoom(msgBuf, ws);
-		}
-		catch(e)
-		{}
-	}
-
-	private readData(Buf : ByteBuffer) : object
-	{
-		return JSON.parse(Buf.readString());
-	}
-
-	private sendData(ws : ChatWebSocket, commandCode : ChatOpCode, sendMsg : object)
-	{
-		const sendStr = JSON.stringify(sendMsg);
-		const sendBuf = ByteBuffer.create(1 + sendStr.length);
-		sendBuf.write1(commandCode);
-		sendBuf.writeString(sendStr);
-		ws.send(sendBuf.toArray());
-	}
-
-	private async LoadFriendList(ws : ChatWebSocket, userId : number)
-	{
-		const friendList = await this.prismaService.friend.findMany({
-			where : {
-				accountId : userId,
+	async LoadFriendList(client: client) {
+		const friendList: { friendAccount: LoadFriendAttribute }[] = await this.prismaService.friend.findMany({
+			where: {
+				accountId: client.userId,
 			},
-			select : {
-				friendAccount : {
-					select : {
-						id : true,
-						nickName : true,
-						nickTag : true,
-						avatarKey: true
+			select: {
+				friendAccount: {
+					select: {
+						id: true,
+						nickName: true,
+						nickTag: true,
+						avatarKey: true,
+						activeStatus: true,
+						activeTimestamp: true,
+						statusMessage: true,
 					}
 				},
 			}
-		}) // 올바른 값이 들어왔는지 확인
-		this.sendData(ws, ChatOpCode.LoadFriendsList, friendList);
-		
+		})
+		this.sendData(client.socket, ChatOpCode.LoadFriendsList, friendList);
 	}
-	
-	private async ChatServerConnect(ws : ChatWebSocket, clients : Map<ChatWebSocket, number>) {
 
-		const jwt = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySUQiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.sJPqrqaxt8_KLfjfExnwFt1yJSkCbz5IDzBZ5C6Xuhc'
+	async ChatServerConnect(buf: ByteBuffer, client: ChatWebSocket) {
 
-		const result = await jwtVerifyHMAC(jwt, 'HS256', encodeUTF8(this.config.jwtSecret));
-		if (result.success) 
-		{
+		const result = await jwtVerifyHMAC(buf.readString(), 'HS256', encodeUTF8(this.config.jwtSecret));
+		if (result.success) {
 			const payload = result.payload;
-			const userId : number = Number(payload['userId']);
-			clients.set(ws, userId);
-			const roomList = await this.prismaService.chatMember.findMany({
-				where : {
-					accountId : userId,
-				},
-				select : {
-					chat : true,
-				}
-			}); // 올바른 값이 들어왔는지 확인
-			this.sendData(ws, ChatOpCode.Connect, roomList);
+			const buf = ByteBuffer.createWithOpcode(ChatOpCode.Connect);
+			client.userId = Number(payload['userId']);
+
+			client.send(buf.toArray());
 		}
-		else 
+		else
 			throw new CustomException('Connect Error');
 	}
 
-	private async CreateRoom(msgBuf : ByteBuffer, ws : ChatWebSocket, socketUserId : number)
-	{
-		const attibute : RoomCreateDTO = JSON.parse(msgBuf.readString()); // title, modeflags, password, limit가 있는지 확인 -> error처리
-		const newRoom = await this.prismaService.chat.create({
-			data : {
-				title : attibute.RoomAttibutes.title,
-				modeFlags : attibute.RoomAttibutes.modeFlags,
-				password : attibute.RoomAttibutes.password,
-				limit : attibute.RoomAttibutes.limit,
+	async sendChat(client: ChatWebSocket) {
+		const buf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Room);
+		const roomList: { chat: ChatWithoutId }[] = await this.prismaService.chatMember.findMany({
+			where: {
+				accountId: client.userId,
 			},
-		}); // 제대로된 값이 들어왔는지 확인
-		await this.prismaService.chatMember.createMany({
-			data : CreateChatMemberArray(newRoom['id'], socketUserId, attibute.MemberList)
-		})//제대로된 값이 들어왔는지 확인
-		this.sendData(ws, ChatOpCode.Create, newRoom);
+			select: {
+				chat: true
+			}
+		});
+		wrtieChats(roomList.length, buf, roomList);
+		client.send(buf.toArray());
 	}
 
-	private async EnterRoom(msgBuf : ByteBuffer, ws : ChatWebSocket)
-	{
-		const chatRoom = this.readData(msgBuf);
+	async createRoom(buf: ByteBuffer, client: ChatWebSocket, clients: Set<ChatWebSocket>) {
+		const createInfo: { chat: ChatWithoutIdUuid, members: number[] } = readChatAndMemebers(buf)
+		const newRoom: ChatEntity = await this.prismaService.chat.create({
+			data: createInfo.chat,
+		});
+		await this.prismaService.chatMember.create({
+			data: {
+				chatId: newRoom.id,
+				accountId: client.userId,
+				modeFlags: ChatRightCode.Admin
+			}
+		})
+		await this.prismaService.chatMember.createMany({
+			data: CreateChatMemberArray(newRoom.id, createInfo.members),
+		})
+
+		const roomInfo: RoomInfo | null = await this.prismaService.chat.findUnique({
+			where: {
+				id: newRoom.id,
+			},
+			select: {
+				uuid: true,
+				title: true,
+				modeFlags: true,
+				password: true,
+				limit: true,
+				members: {
+					select: {
+						account: {
+							select: {
+								uuid: true,
+								nickName: true,
+								nickTag: true,
+								avatarKey: true,
+								activeStatus: true,
+								activeTimestamp: true,
+								statusMessage: true
+							}
+						},
+						modeFlags: true
+					}
+				},
+				messages: {
+					select: {
+						id: true,
+						account: {
+							select: {
+								uuid: true
+							}
+						},
+						content: true,
+						modeFlags: true,
+						timestamp: true
+					}
+				}
+			}
+		})
+		const sendBuf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Create);
+		if (roomInfo)
+			writeRoominfo(sendBuf, roomInfo);
+		else
+			throw new CustomException('존재하지 않는 채팅방입니다.')
+		createInfo.members.push(client.userId);
+		for (let client of clients) {
+			if (createInfo.members.includes(client.userId))
+				client.send(sendBuf.toArray());
+		}
 	}
+
+	async JoinRoom(msgBuf: ByteBuffer, client: client) {
+		const RecievedChatRoom: Chat = JSON.parse(msgBuf.readString());
+		const chatRoom = await this.prismaService.chat.findUnique({
+			where: {
+				id: RecievedChatRoom.id,
+				title: RecievedChatRoom.title,
+				modeFlags: RecievedChatRoom.modeFlags,
+				password: RecievedChatRoom.password,
+				limit: RecievedChatRoom.limit
+			}
+		});
+		if (!chatRoom)
+			throw new CustomException('Bad Access'); // 잘못된 비밀번호 혹은 잘못된 접근일때
+		await this.prismaService.chatMember.create({
+			data: {
+				chatId: RecievedChatRoom.id,
+				accountId: client.userId,
+				modeFlags: ChatRightCode.Normal
+			}
+		})
+		const sendMsg: ChatRoomInformation = await this.MakeChatRoomInformation(RecievedChatRoom);
+		this.sendData(client.socket, ChatOpCode.Join, sendMsg);
+	}
+
+	async SearchPubilcRoom(ws: ChatWebSocket) {
+		const publicRoom = await this.prismaService.chat.findMany({
+			where: {
+				OR: [
+					{
+						modeFlags: ChatRoomMode.PublicNoPass
+					},
+					{
+						modeFlags: ChatRoomMode.PublicPass
+					}
+				]
+			}
+		});
+		this.sendData(ws, ChatOpCode.PublicSearch, publicRoom)
+	}
+
+	// async PartRoom(msgBuf : ByteBuffer, client : client)
+	// {
+
+
+	// }
 }

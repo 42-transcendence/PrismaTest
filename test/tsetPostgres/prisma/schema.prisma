@@ -11,6 +11,16 @@ datasource db {
 }
 
 model User {
-  id   Int    @id @default(autoincrement())
-  name String
+  id         Int          @id @default(autoincrement())
+  name       String
+  passMode   Int
+  timeStamp  DateTime     @default(now())
+  preference preference[]
+}
+
+model preference {
+  id     Int    @id @default(autoincrement())
+  prefer String
+  userId Int
+  user   User   @relation(fields: [userId], references: [id])
 }

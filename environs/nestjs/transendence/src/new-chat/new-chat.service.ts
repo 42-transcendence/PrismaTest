@@ -1,37 +1,57 @@
-import { WebSocketGateway, SubscribeMessage, OnGatewayConnection, OnGatewayDisconnect, MessageBody } from '@nestjs/websockets';
-import { ChatWebSocket } from 'src/chat/utils/chatSocket';
+import {
+  SubscribeMessage,
+  WebSocketGateway,
+  WebSocketServer as IsWebSocketServer,
+  OnGatewayConnection, OnGatewayDisconnect
+} from "@nestjs/websockets";
+// import { from, Observable } from "rxjs";
+// import { map } from "rxjs/operators";
+import { ByteBuffer } from "libs/byte-buffer";
+import { WebSocketServer } from "ws";
+import { ChatWebSocket } from 'src/new-chat/chatSocket';
+import { CommandService } from "src/command/command.service";
 
 
-@WebSocketGateway(8000)
-export class NewChatService implements OnGatewayConnection, OnGatewayDisconnect {
-	
-	clients: Map<number, ChatWebSocket>;
-    
-	constructor() {
-        this.clients = new Map();
-    }
-
-
-	
-    public handleConnection(client : ChatWebSocket): void {
-        console.log('hi');
-        this.clients.set(1, client);
-    }
-
-    public handleDisconnect(client : ChatWebSocket): void {
-        console.log('bye', client);
-        this.clients.delete(1);
-    }
-
-    @SubscribeMessage('message')
-    handleMessage(@MessageBody() data: number) {
-		// client.send(data.toString());
-		console.log(data);
-    }
-
-    @SubscribeMessage('data')
-    handleData(client : WebSocket, data: number) {
-		client.send(data.toString());
-		console.log(data);
-    }
+enum ChatOpCode {
+  Connect,
+  LoadFriendsList,
+  Create,
+  Invite,
+  Join,
+  PublicSearch,
+  Auth,
+  Part,
+  Chat,
 }
+
+@WebSocketGateway({
+  // path: "event",
+  WebSocket: ChatWebSocket
+})
+export class EventGateway implements OnGatewayConnection, OnGatewayDisconnect {
+  @IsWebSocketServer()
+  server: WebSocketServer;
+
+  private clients: Set<ChatWebSocket>;
+
+  constructor(private commandService: CommandService) {
+    this.clients = new Set();
+  }
+
+  public handleConnection(client: ChatWebSocket) {
+    this.clients.add(client);
+  }
+
+  public handleDisconnect(client: ChatWebSocket): void {
+    this.clients.delete(client);
+  }
+
+
+
+  @SubscribeMessage(ChatOpCode.Connect)
+  async Connection(client: ChatWebSocket, data: ByteBuffer): Promise<ByteBuffer> {
+    await this.commandService.ChatServerConnect(data, client);
+    return data;
+  }
+}
+

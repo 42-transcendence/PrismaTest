@@ -1,7 +1,7 @@
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["services", "resources"]
+  schemas  = ["services_test", "resources_test"]
 }
 
 generator client {
@@ -9,12 +9,26 @@ generator client {
   previewFeatures = ["postgresqlExtensions", "multiSchema"]
 }
 
+generator nestjsDto {
+  provider                        = "prisma-generator-nestjs-dto"
+  output                          = "../src/generated/model"
+  outputToNestJsResourceStructure = "false"
+  exportRelationModifierClasses   = "true"
+  reExport                        = "true"
+  createDtoPrefix                 = "Create"
+  updateDtoPrefix                 = "Update"
+  dtoSuffix                       = "Model"
+  entityPrefix                    = ""
+  entitySuffix                    = "Entity"
+  fileNamingStyle                 = "kebab"
+}
+
 enum Role {
   USER
-  OPERATOR
+  ADMINISTRATOR
 
   @@map("role")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 enum RegistrationState {
@@ -24,7 +38,7 @@ enum RegistrationState {
   UNREGISTERED
 
   @@map("registration_state")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 enum ActiveStatus {
@@ -36,14 +50,15 @@ enum ActiveStatus {
   GAME
 
   @@map("active_status")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model Account {
   id                    Int               @id @default(autoincrement())
+  uuid                  String            @unique @default(uuid()) @db.Uuid
   // Authentication
-  idIssuer              Int
-  idSubject             String            @db.VarChar(256)
+  authIssuer            Int
+  authSubject           String            @db.VarChar(256)
   otpSecret             String?           @db.VarChar(512)
   // Register
   createdTimestamp      DateTime          @default(now())
@@ -80,34 +95,35 @@ model Account {
   currentGameDevice     Device?           @relation("CurrentGameDevice", fields: [currentGameDeviceId], references: [id])
   currentGameDeviceId   Int?              @unique
 
-  @@unique([idIssuer, idSubject])
+  @@unique([authIssuer, authSubject])
   @@index([nickName, nickTag])
   @@map("accounts")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model Authorization {
   id               String   @id @default(nanoid())
+  endpointKey      String
   redirectURI      String
   createdTimestamp DateTime @default(now())
 
   @@map("authorizations")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model Session {
-  id               String   @id @default(cuid())
+  id               Int      @id @default(autoincrement())
   account          Account  @relation(fields: [accountId], references: [id])
   accountId        Int
-  token            String   @unique @default(uuid())
+  token            String   @unique @default(nanoid(128))
   createdTimestamp DateTime @default(now())
   successor        Session? @relation("SessionHistory")
   predecessor      Session? @relation("SessionHistory", fields: [predecessorId], references: [id])
-  predecessorId    String?  @unique
+  predecessorId    Int?     @unique
   isValid          Boolean  @default(true)
 
   @@map("sessions")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model Device {
@@ -123,7 +139,7 @@ model Device {
 
   @@index([updatedTimestamp])
   @@map("devices")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model Record {
@@ -139,17 +155,18 @@ model Record {
   @@index([skillRating(sort: Asc)])
   @@index([gameStatistics(ops: JsonbOps)], type: Gin)
   @@map("records")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model Achievement {
-  record             Record?  @relation(fields: [accountId], references: [accountId])
-  accountId          Int      @unique
+  record             Record   @relation(fields: [accountId], references: [accountId])
+  accountId          Int
   achievementId      Int
   completedTimestamp DateTime @default(now())
 
+  @@id([accountId, achievementId])
   @@map("achievements")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model Friend {
@@ -162,7 +179,7 @@ model Friend {
 
   @@id(fields: [accountId, friendAccountId])
   @@map("friends")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model Enemy {
@@ -174,7 +191,7 @@ model Enemy {
 
   @@id(fields: [accountId, enemyAccountId])
   @@map("enemies")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model Ban {
@@ -189,11 +206,12 @@ model Ban {
   bannedTimestamp  DateTime  @default(now())
 
   @@map("bans")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model Chat {
   id        Int           @id @default(autoincrement())
+  uuid      String        @unique @default(uuid()) @db.Uuid
   title     String
   modeFlags Int
   password  String
@@ -202,7 +220,7 @@ model Chat {
   messages  ChatMessage[]
 
   @@map("chats")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model ChatMember {
@@ -214,7 +232,7 @@ model ChatMember {
 
   @@id([chatId, accountId])
   @@map("chat_members")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model ChatMessage {
@@ -229,7 +247,7 @@ model ChatMessage {
 
   @@index([timestamp(ops: TimestampMinMaxOps)], type: Brin)
   @@map("chat_messages")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model ChatBan {
@@ -244,11 +262,13 @@ model ChatBan {
   bannedTimestamp  DateTime  @default(now())
 
   @@map("chat_bans")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model Game {
   id          BigInt       @id @default(autoincrement())
+  uuid        String       @unique @default(uuid()) @db.Uuid
+  code        String       @unique @default(nanoid(2))
   title       String
   modeFlags   Int
   password    String
@@ -258,7 +278,7 @@ model Game {
   members     GameMember[]
 
   @@map("games")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model GameMember {
@@ -271,7 +291,7 @@ model GameMember {
 
   @@id([gameId, accountId])
   @@map("game_members")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model GameQueue {
@@ -283,11 +303,12 @@ model GameQueue {
   @@index([skillRating])
   @@index([timestamp])
   @@map("game_queue")
-  @@schema("services")
+  @@schema("services_test")
 }
 
 model GameHistory {
-  id               BigInt    @id @default(autoincrement())
+  id               BigInt    @id
+  uuid             String    @unique @db.Uuid
   modeFlags        Int
   battlefield      Int
   timestamp        DateTime
@@ -299,5 +320,5 @@ model GameHistory {
   @@index([statistic(ops: JsonbOps)], type: Gin)
   @@index([memberStatistics(ops: JsonbOps)], type: Gin)
   @@map("game_history")
-  @@schema("services")
+  @@schema("services_test")
 }
