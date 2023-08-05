@@ -1,61 +1,63 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>web socket</title>
-  </head>
-  <script>
-    function stringToUnit8Array(msg)
-    {
-      const buf = new Uint8Array(msg.length + 3);
-      buf[0] = +1;
-      buf[1] = +2;
-      buf[2] = +3;
-      for (let i = 0; i < msg.length ; i++)
-        buf[i + 3] = msg.charCodeAt(i);
-      return buf;
-    }
 
-    const webSocket = new WebSocket("ws://localhost:5000");
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>web socket</title>
+</head>
+<script>
+  function stringToUnit8Array(msg) {
+    const buf = new Uint8Array(msg.length + 3);
+    buf[0] = +1;
+    buf[1] = +2;
+    buf[2] = +3;
+    for (let i = 0; i < msg.length; i++)
+      buf[i + 3] = msg.charCodeAt(i);
+    return buf;
+  }
 
-    // 웹 소켓 연결 이벤트
-    webSocket.onopen = function () {
-      alert("웹소켓 서버와 연결에 성공했습니다.");
-      const msg = 'hello world!'
-      const b = stringToUnit8Array(msg);
-      console.log('Connected');
-        socket.send(JSON.stringify({event: 'events',data: 'test',}));
-    };
+  const webSocket = new WebSocket("ws://localhost:3000");
 
-    // 웹 소켓 메세지 수신
-    webSocket.onmessage = function (event) {
-      const prev_msg = window.localStorage.getItem('prev_msg');
-      alert(`prev_msg : ${prev_msg}, present_msg : ${event.data}`);
-      window.localStorage.setItem('prev_msg', event.data);
-    };
+  // 웹 소켓 연결 이벤트
+  webSocket.onopen = function () {
+    alert("웹소켓 서버와 연결에 성공했습니다.");
+    const msg = 'hello world!'
+    const b = stringToUnit8Array(msg);
+    console.log('Connected');
+    socket.send(JSON.stringify({ event: 'events', data: 'test', }));
+  };
 
-    // 웹 소켓 연결 종료
-    webSocket.onclose = function () {
-      alert("웹소켓 서버와 연결이 종료되었습니다.");
-    };
+  // 웹 소켓 메세지 수신
+  webSocket.onmessage = function (event) {
+    const prev_msg = window.localStorage.getItem('prev_msg');
+    alert(`prev_msg : ${prev_msg}, present_msg : ${event.data}`);
+    window.localStorage.setItem('prev_msg', event.data);
+  };
 
-    // 오류 발생
-    webSocket.onerror = function (error) {
-      console.log(error);
-    };
+  // 웹 소켓 연결 종료
+  webSocket.onclose = function () {
+    alert("웹소켓 서버와 연결이 종료되었습니다.");
+  };
 
-    function sendMessage() {
-      const message = document.getElementById("message").value;
-      webSocket.send(message);
-    }
-  </script>
-  <body>
-    <div>
-      <input type="text" id="message" />
-      <button type="button" onclick="sendMessage()">전송</button>
-    </div>
-    <div></div>
-  </body>
+  // 오류 발생
+  webSocket.onerror = function (error) {
+    console.log(error);
+  };
+
+  function sendMessage() {
+    const message = document.getElementById("message").value;
+    webSocket.send(message);
+  }
+</script>
+
+<body>
+  <div>
+    <input type="text" id="message" />
+    <button type="button" onclick="sendMessage()">전송</button>
+  </div>
+  <div></div>
+</body>
+
 </html>

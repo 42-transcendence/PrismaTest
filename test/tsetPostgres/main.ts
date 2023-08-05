@@ -18,18 +18,10 @@ const prisma = new PrismaClient
 // }
 
 async function main() {
-	const user = await prisma.user.findUnique({
-		where: {
-			id: 1
-		},
-		include: {
-			preference: {
-				select: {
-					prefer: true,
-					id: true
-				}
-			},
-		},
+	const user = await prisma.user.findMany({
+		orderBy: {
+			id: 'desc'
+		}
 	})
 	// const users = new Map();
 	// const arr = [1, 2, 3];
