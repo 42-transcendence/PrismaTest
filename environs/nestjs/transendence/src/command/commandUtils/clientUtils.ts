@@ -1,5 +1,5 @@
 import { ByteBuffer } from "libs/byte-buffer";
-import { ChatOpCode, ChatWithoutId, ChatWithoutIdUuid, RoomInfo, readChats, readRoominfo, writeChatAndMemebers, writeRoomJoinInfo, JoinCode, ChatMessageWithChatUuid, CreatCode, readChatMemberAccount, writeInviteMembers, readChat, AccountWithUuid, readAccountWithUuids, PartCode } from "./utils";
+import { ChatOpCode, ChatWithoutId, ChatWithoutIdUuid, RoomInfo, readChats, readRoominfo, writeChatAndMemebers, writeRoomJoinInfo, JoinCode, ChatMessageWithChatUuid, CreatCode, readChatMemberAccount, writeInviteMembers, readChat, AccountWithUuid, readAccountWithUuids, PartCode, accountInChat } from "./utils";
 import { CustomException } from "src/command/commandUtils/exception";
 
 export function sendConnectMessage(client: WebSocket) {
@@ -46,6 +46,9 @@ export function sendPart(client: WebSocket, roomUUID: string) {
 //utils
 function addRoomList(room: RoomInfo) {
 	const message: ChatMessageWithChatUuid[] = [];
+	const members: accountInChat[] = [];
+	for (let member of room.members)
+		members.push({ account: { uuid: member.account.uuid, avatarKey: member.account.avatarKey } })
 	if (room.messages)
 		message.push(room.messages[0]);
 	const addRoom: ChatWithoutId = {
@@ -54,7 +57,7 @@ function addRoomList(room: RoomInfo) {
 		modeFlags: room.modeFlags,
 		password: room.password,
 		limit: room.limit,
-		_count: { members: room.members.length },
+		members: members,
 		messages: message,
 	}
 	const rooms = JSON.parse(String(window.localStorage.getItem('rooms')));
@@ -101,9 +104,9 @@ export function accpetJoin(buf: ByteBuffer) {
 			window.localStorage.setItem('nowChatInfo', JSON.stringify(nowRoom));
 		}
 		const rooms: ChatWithoutId[] = JSON.parse(String(window.localStorage.getItem('rooms')));
-		for (let room of rooms) {
-			if (room.uuid == uuid) {
-				++room._count.members;
+		for (let i = 0; i < rooms.length; ++i) {
+			if (rooms[i].uuid == uuid) {
+				rooms[i].members.push({ account: { uuid: member.account.uuid, avatarKey: member.account.avatarKey } })
 				break;
 			}
 		}
@@ -138,12 +141,39 @@ export function acceptPart(buf: ByteBuffer) {
 	const code = buf.read1();
 	const roomUUID = buf.readString();
 	const nowRoom: RoomInfo = JSON.parse(String(window.localStorage.getItem('nowChatInfo')));
-	const rooms: ChatWithoutId[] = JSON.parse(String(window.localStorage.getItem('nowChatInfo')));
+	const rooms: ChatWithoutId[] = JSON.parse(String(window.localStorage.getItem('rooms')));
 	if (code == PartCode.Accept) {
-		if (nowRoom.uuid == roomUUID) {
+		if (nowRoom.uuid == roomUUID)
 			window.localStorage.setItem('nowChatInfo', JSON.stringify(null));
+		for (let i = 0; i < rooms.length; ++i) {
+			if (rooms[i].uuid == roomUUID) {
+				rooms.splice(i, 1);
+				break;
+			}
 		}
 	}
+	else if (code == PartCode.Part) {
+		const clientUUID = buf.readString();
+		if (nowRoom.uuid == roomUUID) {
+			for (let i = 0; i < nowRoom.members.length; ++i) {
+				if (nowRoom.members[i].account.uuid == clientUUID) {
+					nowRoom.members.splice(i, 1);
+					break;
+				}
+			}
+			window.localStorage.setItem('nowChatInfo', JSON.stringify(nowRoom))
+		}
+		for (let i = 0; i < rooms.length; ++i) {
+			if (rooms[i].uuid == roomUUID) {
+				for (let j = 0; j < rooms[i].members.length; ++j) {
+					if (rooms[i].members[j].account.uuid == clientUUID) {
+						rooms[i].members.splice(j, 1);
+					}
+				}
+			}
+		}
+	}
+	window.localStorage.setItem('rooms', JSON.stringify(rooms));
 }
 
 export function acceptChatOpCode(buf: ByteBuffer, client: WebSocket) {

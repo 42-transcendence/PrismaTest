@@ -1,6 +1,7 @@
 import { ByteBuffer } from "libs/byte-buffer";
 import { $Enums, Prisma } from "@prisma/client";
 import { ChatMemberEntity } from "src/generated/model";
+import { NULL_UUID } from "libs/uuid";
 
 export enum ChatOpCode {
 	Connect,
@@ -13,13 +14,16 @@ export enum ChatOpCode {
 	PublicSearch,
 	Part,
 	Chat,
-	Auth,
 }
 
-export enum ChatRightCode {
+export enum ChatMemberModeFlags {
 	Admin,
 	Manager,
 	Normal
+}
+
+export enum ChatMessageFlags {
+
 }
 
 export enum ChatRoomMode {
@@ -49,7 +53,7 @@ export enum PartCode {
 export function CreateChatMemberArray(chatRoomId: number, memberList: number[]): ChatMemberEntity[] {
 	const arr: ChatMemberEntity[] = [];
 	for (let i of memberList)
-		arr.push({ chatId: chatRoomId, accountId: i, modeFlags: ChatRightCode.Normal });
+		arr.push({ chatId: chatRoomId, accountId: i, modeFlags: ChatMemberModeFlags.Normal });
 	return arr;
 }
 
@@ -105,10 +109,23 @@ const chatWhitoutId = Prisma.validator<Prisma.ChatDefaultArgs>()({
 		modeFlags: true,
 		password: true,
 		limit: true,
-		_count: {
+		// _count: {
+		// 	select: {
+		// 		members: true,
+		// 	}
+		// },
+		members: {
 			select: {
-				members: true,
-			}
+				account: {
+					select: {
+						uuid: true,
+						avatarKey: true
+					}
+				}
+			},
+			orderBy: {
+				accountId: 'asc'
+			},
 		},
 		messages: {
 			select: {
@@ -137,8 +154,8 @@ export function writeChat(buf: ByteBuffer, room: ChatWithoutId): ByteBuffer {
 	buf.write4Unsigned(room.limit);
 	buf.writeString(room.title);
 	buf.writeString(room.password);
-	buf.write4Unsigned(room._count.members);
 	writeChatMessage(buf, room.messages[0]);
+	writeAccountInChats(buf, room.members);
 	return buf;
 }
 
@@ -150,8 +167,8 @@ export function wrtieChats(buf: ByteBuffer, rooms: ChatWithoutId[]): ByteBuffer 
 		buf.write4Unsigned(room.limit);
 		buf.writeString(room.title);
 		buf.writeString(room.password);
-		buf.write4Unsigned(room._count.members);
 		writeChatMessage(buf, room.messages[0]);
+		writeAccountInChats(buf, room.members);
 	}
 	return buf;
 }
@@ -162,15 +179,15 @@ export function readChat(buf: ByteBuffer): ChatWithoutId {
 	const limit = buf.read4Unsigned();
 	const title = buf.readString();
 	const password = buf.readString();
-	const count = buf.read4Unsigned();
 	const message = readChatMessage(buf);
+	const members = readAccountInChats(buf);
 	return {
 		uuid,
 		modeFlags,
 		limit,
 		title,
 		password,
-		_count: { members: count },
+		members: members,
 		messages: [message]
 	}
 }
@@ -185,11 +202,44 @@ export function readChats(buf: ByteBuffer): ChatWithoutId[] {
 			limit: buf.read4Unsigned(),
 			title: buf.readString(),
 			password: buf.readString(),
-			_count: { members: buf.read4Unsigned() },
+			members: readAccountInChats(buf),
 			messages: [readChatMessage(buf)]
 		})
 	}
 	return rooms;
+}
+
+export class accountInChat {
+	account: { uuid: string, avatarKey: string | null };
+}
+
+function writeAccountInChats(buf: ByteBuffer, accounts: accountInChat[]) {
+	buf.write2Unsigned(accounts.length);
+	for (let i = 0; i < accounts.length; ++i) {
+		buf.writeString(accounts[i].account.uuid);
+		const avatarKey = accounts[i].account.avatarKey;
+		if (avatarKey) {
+			buf.writeBoolean(true);
+			buf.writeString(avatarKey);
+		}
+		else
+			buf.writeBoolean(false);
+	}
+	return buf;
+}
+
+function readAccountInChats(buf: ByteBuffer): accountInChat[] {
+	const size = buf.read2Unsigned();
+	const accounts: accountInChat[] = [];
+	for (let i = 0; i < size; ++i) {
+		const uuid = buf.readString();
+		let avatarKey: string | null = null;
+		if (buf.readBoolean()) {
+			avatarKey = buf.readString();
+		}
+		accounts.push({ account: { uuid, avatarKey } })
+	}
+	return accounts;
 }
 
 //chatMemberWithChatUuid
@@ -215,18 +265,18 @@ export type ChatMemberWithChatUuid = Prisma.ChatMemberGetPayload<typeof chatMemb
 export function writeChatMemberAccount(buf: ByteBuffer, member: ChatMemberWithChatUuid): ByteBuffer {
 	buf.writeString(member.account.uuid);
 	if (member.account.nickName) {
-		buf.write1(1);
+		buf.writeBoolean(true);
 		buf.writeString(member.account.nickName);
 	}
 	else
-		buf.write1(0);
+		buf.writeBoolean(false);
 	buf.write4Unsigned(member.account.nickTag);
 	if (member.account.avatarKey) {
-		buf.write1(1);
+		buf.writeBoolean(true);
 		buf.writeString(member.account.avatarKey)
 	}
 	else
-		buf.write1(0);
+		buf.writeBoolean(false);
 	buf.writeString(member.account.activeStatus)
 	buf.writeDate(member.account.activeTimestamp);
 	buf.writeString(member.account.statusMessage);
@@ -239,18 +289,18 @@ export function writeChatMemberAccounts(buf: ByteBuffer, members: ChatMemberWith
 	for (let member of members) {
 		buf.writeString(member.account.uuid);
 		if (member.account.nickName) {
-			buf.write1(1);
+			buf.writeBoolean(true);
 			buf.writeString(member.account.nickName);
 		}
 		else
-			buf.write1(0);
+			buf.writeBoolean(false);
 		buf.write4Unsigned(member.account.nickTag);
 		if (member.account.avatarKey) {
-			buf.write1(1);
+			buf.writeBoolean(true);
 			buf.writeString(member.account.avatarKey)
 		}
 		else
-			buf.write1(0);
+			buf.writeBoolean(false);
 		buf.writeString(member.account.activeStatus)
 		buf.writeDate(member.account.activeTimestamp);
 		buf.writeString(member.account.statusMessage);
@@ -262,11 +312,11 @@ export function writeChatMemberAccounts(buf: ByteBuffer, members: ChatMemberWith
 export function readChatMemberAccount(buf: ByteBuffer): ChatMemberWithChatUuid {
 	const uuid = buf.readString();
 	let nickName: string | null = null;
-	if (buf.read1())
+	if (buf.readBoolean())
 		nickName = buf.readString();
 	const nickTag = buf.read4Unsigned();
 	let avatarKey: string | null = null;
-	if (buf.read1())
+	if (buf.readBoolean())
 		avatarKey = buf.readString();
 	const activeStatus = buf.readString() as $Enums.ActiveStatus;
 	const activeTimestamp = buf.readDate();
@@ -292,11 +342,11 @@ export function readChatMemberAccounts(buf: ByteBuffer): ChatMemberWithChatUuid[
 	for (let i = 0; i < size; ++i) {
 		const uuid = buf.readString();
 		let nickName: string | null = null;
-		if (buf.read1())
+		if (buf.readBoolean())
 			nickName = buf.readString();
 		const nickTag = buf.read4Unsigned();
 		let avatarKey: string | null = null;
-		if (buf.read1())
+		if (buf.readBoolean())
 			avatarKey = buf.readString();
 		const activeStatus = buf.readString() as $Enums.ActiveStatus;
 		const activeTimestamp = buf.readDate();
@@ -338,7 +388,12 @@ export type ChatMessageWithChatUuid = Prisma.ChatMessageGetPayload<typeof chatMe
 
 export function writeChatMessage(buf: ByteBuffer, chatMessage: ChatMessageWithChatUuid): ByteBuffer {
 	buf.write8Unsigned(chatMessage.id)
-	buf.writeUUID(chatMessage.account.uuid);
+	//TODO 익명플레그 구현 결정하기
+	if (!(chatMessage.modeFlags & 4)) {
+		buf.writeUUID(chatMessage.account.uuid);
+	} else {
+		buf.writeUUID(NULL_UUID);
+	}
 	buf.write4Unsigned(chatMessage.modeFlags);
 	buf.writeDate(chatMessage.timestamp);
 	buf.writeString(chatMessage.content);
@@ -349,7 +404,12 @@ export function writeChatMessages(buf: ByteBuffer, chatMessages: ChatMessageWith
 	buf.write2Unsigned(chatMessages.length);
 	for (let chatMessage of chatMessages) {
 		buf.write8Unsigned(chatMessage.id)
-		buf.writeUUID(chatMessage.account.uuid);
+		//TODO 익명플레그 구현 결정하기
+		if (!(chatMessage.modeFlags & 4)) {
+			buf.writeUUID(chatMessage.account.uuid);
+		} else {
+			buf.writeUUID(NULL_UUID);
+		}
 		buf.write4Unsigned(chatMessage.modeFlags);
 		buf.writeDate(chatMessage.timestamp);
 		buf.writeString(chatMessage.content);
@@ -405,11 +465,11 @@ export function writeRoominfo(buf: ByteBuffer, roomInfo: RoomInfo): ByteBuffer {
 	buf.write4Unsigned(roomInfo.limit);
 	writeChatMemberAccounts(buf, roomInfo.members);
 	if (roomInfo.messages) {
-		buf.write1(1)
+		buf.writeBoolean(true);
 		writeChatMessages(buf, roomInfo.messages);
 	}
 	else
-		buf.write1(0);
+		buf.writeBoolean(false);
 	return buf;
 }
 
@@ -421,7 +481,7 @@ export function readRoominfo(buf: ByteBuffer): RoomInfo {
 	const limit = buf.read4Unsigned();
 	const members = readChatMemberAccounts(buf);
 	let messages: ChatMessageWithChatUuid[] | undefined = undefined;
-	if (buf.read1())
+	if (buf.readBoolean())
 		readChatMessages(buf);
 	return {
 		uuid,
@@ -493,14 +553,14 @@ export function writeAccountWithUuids(buf: ByteBuffer, accounts: AccountWithUuid
 	for (let account of accounts) {
 		buf.writeString(account.uuid);
 		if (account.nickName) {
-			buf.write1(1);
+			buf.writeBoolean(true);
 			buf.writeString(account.nickName);
 		}
 		else
-			buf.write1(0);
+			buf.writeBoolean(false);
 		buf.write4Unsigned(account.nickTag);
 		if (account.avatarKey) {
-			buf.write1(1);
+			buf.writeBoolean(true);
 			buf.writeString(account.avatarKey)
 		}
 		else
@@ -518,11 +578,11 @@ export function readAccountWithUuids(buf: ByteBuffer): AccountWithUuid[] {
 	for (let i = 0; i < size; ++i) {
 		const uuid = buf.readString();
 		let nickName: string | null = null;
-		if (buf.read1())
+		if (buf.readBoolean())
 			nickName = buf.readString();
 		const nickTag = buf.read4Unsigned();
 		let avatarKey: string | null = null;
-		if (buf.read1())
+		if (buf.readBoolean())
 			avatarKey = buf.readString();
 		const activeStatus = buf.readString() as $Enums.ActiveStatus;
 		const activeTimestamp = buf.readDate();

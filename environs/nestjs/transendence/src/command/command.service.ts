@@ -7,7 +7,7 @@ import { ChatWebSocket } from "src/new-chat/chatSocket";
 import { jwtVerifyHMAC } from "libs/jwt";
 import { encodeUTF8 } from "libs/utf8";
 import { CustomException } from "src/command/commandUtils/exception";
-import { AccountWithUuid, ChatRightCode, ChatRoomMode, ChatWithoutIdUuid, CreatCode, CreateChatMemberArray, RoomInfo, readChatAndMemebers, readInviteMembers, readRoomJoinInfo, writeChatMemberAccount, writeRoominfo, writeChat, wrtieChats, writeAccountWithUuids, PartCode } from "./commandUtils/utils";
+import { AccountWithUuid, ChatMemberModeFlags, ChatRoomMode, ChatWithoutIdUuid, CreatCode, CreateChatMemberArray, RoomInfo, readChatAndMemebers, readInviteMembers, readRoomJoinInfo, writeChatMemberAccount, writeRoominfo, writeChat, wrtieChats, writeAccountWithUuids, PartCode } from "./commandUtils/utils";
 import { ChatOpCode, ChatWithoutId, JoinCode } from "./commandUtils/utils";
 import { ChatEntity } from "src/generated/model";
 
@@ -46,10 +46,18 @@ export class CommandService {
 						modeFlags: true,
 						password: true,
 						limit: true,
-						_count: {
+						members: {
 							select: {
-								members: true
-							}
+								account: {
+									select: {
+										uuid: true,
+										avatarKey: true
+									}
+								}
+							},
+							orderBy: {
+								accountId: 'asc'
+							},
 						},
 						messages: {
 							select: {
@@ -115,7 +123,7 @@ export class CommandService {
 			data: {
 				chatId: newRoom.id,
 				accountId: client.userId,
-				modeFlags: ChatRightCode.Admin
+				modeFlags: ChatMemberModeFlags.Admin
 			}
 		})
 		await this.prismaService.chatMember.createMany({
@@ -190,7 +198,7 @@ export class CommandService {
 			data: {
 				chatId: chatRoom.id,
 				accountId: client.userId,
-				modeFlags: ChatRightCode.Normal
+				modeFlags: ChatMemberModeFlags.Normal
 			}
 		})
 		//RoomInfo find
@@ -282,10 +290,18 @@ export class CommandService {
 				modeFlags: true,
 				password: true,
 				limit: true,
-				_count: {
+				members: {
 					select: {
-						members: true
-					}
+						account: {
+							select: {
+								uuid: true,
+								avatarKey: true
+							}
+						}
+					},
+					orderBy: {
+						accountId: 'asc'
+					},
 				},
 				messages: {
 					select: {
@@ -333,7 +349,7 @@ export class CommandService {
 		})
 		if (!room)
 			throw new CustomException('채팅방이 존재하지 않습니다.');
-		if (room.members[0].modeFlags == ChatRightCode.Normal)
+		if (room.members[0].modeFlags == ChatMemberModeFlags.Normal)
 			throw new CustomException('초대 권한이 없습니다.');
 		//chatMember add
 		await this.prismaService.chatMember.createMany({
@@ -350,10 +366,18 @@ export class CommandService {
 				modeFlags: true,
 				password: true,
 				limit: true,
-				_count: {
+				members: {
 					select: {
-						members: true,
-					}
+						account: {
+							select: {
+								uuid: true,
+								avatarKey: true
+							}
+						}
+					},
+					orderBy: {
+						accountId: 'asc'
+					},
 				},
 				messages: {
 					select: {
@@ -473,7 +497,7 @@ export class CommandService {
 				}
 			});
 		//TODO: 나가는 유저의 권한이 admin일때 어떻게 admin 권한을 넘길것인가?
-		else if (room.members[0].modeFlags == ChatRightCode.Admin) { }//
+		else if (room.members[0].modeFlags == ChatMemberModeFlags.Admin) { }//
 		// Part user에 보낼 buf
 		const sendPartUserBuf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Part);
 		sendPartUserBuf.write1(PartCode.Accept);

@@ -73,10 +73,10 @@ export class ByteBuffer {
     const accessor =
       "buffer" in arrayOrBuffer
         ? new DataView(
-            arrayOrBuffer.buffer,
-            arrayOrBuffer.byteOffset,
-            arrayOrBuffer.byteLength
-          )
+          arrayOrBuffer.buffer,
+          arrayOrBuffer.byteOffset,
+          arrayOrBuffer.byteLength
+        )
         : new DataView(arrayOrBuffer);
     return new ByteBuffer(accessor, endian);
   }
@@ -174,6 +174,11 @@ export class ByteBuffer {
 
   readLength(): number {
     return this.read2Unsigned();
+  }
+
+  readBoolean(): boolean {
+    const value: number = this.read1();
+    return value !== 0;
   }
 
   readString(): string {
@@ -286,6 +291,11 @@ export class ByteBuffer {
     return this.write2Unsigned(value);
   }
 
+  writeBoolean(value: boolean): this {
+    this.write1(value ? 1 : 0);
+    return this;
+  }
+
   writeString(value: string): this {
     const data: Uint8Array = ByteBuffer.textEncoder.encode(value);
     const length: number = data.length;
@@ -366,7 +376,7 @@ export class ByteBuffer {
       );
       const newBuffer =
         isDefined_SharedArrayBuffer_ &&
-        this.accessor.buffer instanceof SharedArrayBuffer
+          this.accessor.buffer instanceof SharedArrayBuffer
           ? new SharedArrayBuffer(newByteLength)
           : new ArrayBuffer(newByteLength);
       const newAccessor = new DataView(newBuffer);
