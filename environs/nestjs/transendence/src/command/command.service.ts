@@ -7,7 +7,7 @@ import { ChatWebSocket } from "src/new-chat/chatSocket";
 import { jwtVerifyHMAC } from "libs/jwt";
 import { encodeUTF8 } from "libs/utf8";
 import { CustomException } from "src/command/commandUtils/exception";
-import { AccountWithUuid, ChatRightCode, ChatRoomMode, ChatWithoutIdUuid, CreatCode, CreateChatMemberArray, RoomInfo, readChatAndMemebers, readInviteMembers, readRoomJoinInfo, writeChatMemberAccount, writeRoominfo, writeChat, wrtieChats, writeAccountWithUuids } from "./commandUtils/utils";
+import { AccountWithUuid, ChatRightCode, ChatRoomMode, ChatWithoutIdUuid, CreatCode, CreateChatMemberArray, RoomInfo, readChatAndMemebers, readInviteMembers, readRoomJoinInfo, writeChatMemberAccount, writeRoominfo, writeChat, wrtieChats, writeAccountWithUuids, PartCode } from "./commandUtils/utils";
 import { ChatOpCode, ChatWithoutId, JoinCode } from "./commandUtils/utils";
 import { ChatEntity } from "src/generated/model";
 
@@ -79,6 +79,7 @@ export class CommandService {
 	}
 
 	async sendFriends(client: ChatWebSocket) {
+		const buf = ByteBuffer.createWithOpcode(ChatOpCode.Friends);
 		const friendList: { friendAccount: AccountWithUuid }[] = await this.prismaService.friend.findMany({
 			where: {
 				accountId: client.userId
@@ -100,8 +101,8 @@ export class CommandService {
 		const friends: AccountWithUuid[] = [];
 		for (let friend of friendList)
 			friends.push(friend.friendAccount);
-		const buf = ByteBuffer.createWithOpcode(ChatOpCode.Friends);
 		writeAccountWithUuids(buf, friends);
+		client.send(buf.toArray());
 	}
 
 	async createRoom(buf: ByteBuffer, client: ChatWebSocket, clients: Set<ChatWebSocket>) {
@@ -384,9 +385,110 @@ export class CommandService {
 				otherClient.send(sendBuf.toArray());
 		}
 	}
-	// async PartRoom(msgBuf : ByteBuffer, client : client)
-	// {
 
+	async enterRoom(buf: ByteBuffer, client: ChatWebSocket) {
+		const roomUUID = buf.readString();
+		const roomInfo: RoomInfo | null = await this.prismaService.chat.findUnique({
+			where: {
+				uuid: roomUUID
+			},
+			select: {
+				uuid: true,
+				title: true,
+				modeFlags: true,
+				password: true,
+				limit: true,
+				members: {
+					select: {
+						account: {
+							select: {
+								uuid: true,
+								nickName: true,
+								nickTag: true,
+								avatarKey: true,
+								activeStatus: true,
+								activeTimestamp: true,
+								statusMessage: true
+							}
+						},
+						modeFlags: true
+					}
+				},
+				messages: {
+					select: {
+						id: true,
+						account: {
+							select: {
+								uuid: true
+							}
+						},
+						content: true,
+						modeFlags: true,
+						timestamp: true
+					},
+					orderBy: {
+						id: 'desc'
+					}
+				}
+			}
+		});
+		const sendBuf = ByteBuffer.createWithOpcode(ChatOpCode.Enter);
+		if (roomInfo)
+			writeRoominfo(sendBuf, roomInfo);
+		else
+			throw new CustomException('채팅방이 존재하지 않습니다.');
+		client.send(sendBuf.toArray());
+	}
 
-	// }
+	async partRoom(buf: ByteBuffer, client: ChatWebSocket, clients: Set<ChatWebSocket>) {
+		const roomUUID = buf.readString();
+		//chat id/인원수/member의 권한 추출
+		const room = await this.prismaService.chat.findUnique({
+			where: {
+				uuid: roomUUID,
+			},
+			select: {
+				id: true,
+				members: {
+					select: {
+						modeFlags: true,
+						accountId: true
+					}
+				}
+			}
+		});
+		if (!room)
+			throw new CustomException('채팅방이 존재하지 않습니다.')
+		//chatMember 삭제
+		await this.prismaService.chatMember.delete({
+			where: {
+				chatId_accountId: { chatId: room.id, accountId: client.userId }
+			}
+		})
+		//나가는 방에 혼자있으면 방 삭제
+		if (room.members.length == 1)
+			await this.prismaService.chat.delete({
+				where: {
+					uuid: roomUUID
+				}
+			});
+		//TODO: 나가는 유저의 권한이 admin일때 어떻게 admin 권한을 넘길것인가?
+		else if (room.members[0].modeFlags == ChatRightCode.Admin) { }//
+		// Part user에 보낼 buf
+		const sendPartUserBuf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Part);
+		sendPartUserBuf.write1(PartCode.Accept);
+		sendPartUserBuf.writeString(roomUUID);
+		client.send(sendPartUserBuf.toArray());
+		// 나머지 채팅방 참여 유저에 보낼 buf
+		const sendOtherUserBuf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Part);
+		sendOtherUserBuf.write1(PartCode.Part);
+		sendOtherUserBuf.writeString(roomUUID);
+		sendOtherUserBuf.writeString(client.userUUID);
+		const roomUserUUIDs: number[] = [];
+		for (let member of room.members)
+			roomUserUUIDs.push(member.accountId);
+		for (let otherClient of clients)
+			if (roomUserUUIDs.includes(otherClient.userId))
+				otherClient.send(sendOtherUserBuf.toArray());
+	}
 }

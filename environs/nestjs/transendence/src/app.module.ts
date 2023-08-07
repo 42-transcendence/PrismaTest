@@ -1,7 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
-import { ChatModule } from './chat/chat.module';
 import { ConfigModule } from '@nestjs/config';
 import { CommandModule } from './command/command.module';
 import { NewChatModule } from './new-chat/new-chat.module';
@@ -16,9 +15,8 @@ import authConfig from './config/authConfig';
       // validationSchema,
     }),
     CommandModule,
-    ChatModule,
     NewChatModule,],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule { }

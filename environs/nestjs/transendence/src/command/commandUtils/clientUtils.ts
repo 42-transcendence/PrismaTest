@@ -1,5 +1,5 @@
 import { ByteBuffer } from "libs/byte-buffer";
-import { ChatOpCode, ChatWithoutId, ChatWithoutIdUuid, RoomInfo, readChats, readRoominfo, writeChatAndMemebers, writeRoomJoinInfo, JoinCode, ChatMessageWithChatUuid, CreatCode, readChatMemberAccount, writeInviteMembers, readChat, AccountWithUuid, readAccountWithUuids } from "./utils";
+import { ChatOpCode, ChatWithoutId, ChatWithoutIdUuid, RoomInfo, readChats, readRoominfo, writeChatAndMemebers, writeRoomJoinInfo, JoinCode, ChatMessageWithChatUuid, CreatCode, readChatMemberAccount, writeInviteMembers, readChat, AccountWithUuid, readAccountWithUuids, PartCode } from "./utils";
 import { CustomException } from "src/command/commandUtils/exception";
 
 export function sendConnectMessage(client: WebSocket) {
@@ -28,6 +28,18 @@ export function sendInvite(client: WebSocket, invitation: { chatUUID: string, me
 	//초대권한이 있는지 확인해함.
 	const buf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Invite);
 	writeInviteMembers(buf, invitation);
+	client.send(buf.toArray());
+}
+
+export function sendEnter(client: WebSocket, roomUUID: string) {
+	const buf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Enter);
+	buf.writeString(roomUUID);
+	client.send(buf.toArray());
+}
+
+export function sendPart(client: WebSocket, roomUUID: string) {
+	const buf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Part);
+	buf.writeString(roomUUID);
 	client.send(buf.toArray());
 }
 
@@ -117,8 +129,25 @@ export function acceptFriends(buf: ByteBuffer) {
 	window.localStorage.setItem('friends', JSON.stringify(friends));
 }
 
+export function acceptEnter(buf: ByteBuffer) {
+	const roominfo: RoomInfo = readRoominfo(buf);
+	window.localStorage.setItem('nowChatInfo', JSON.stringify(roominfo));
+}
+
+export function acceptPart(buf: ByteBuffer) {
+	const code = buf.read1();
+	const roomUUID = buf.readString();
+	const nowRoom: RoomInfo = JSON.parse(String(window.localStorage.getItem('nowChatInfo')));
+	const rooms: ChatWithoutId[] = JSON.parse(String(window.localStorage.getItem('nowChatInfo')));
+	if (code == PartCode.Accept) {
+		if (nowRoom.uuid == roomUUID) {
+			window.localStorage.setItem('nowChatInfo', JSON.stringify(null));
+		}
+	}
+}
+
 export function acceptChatOpCode(buf: ByteBuffer, client: WebSocket) {
-	const code: ChatOpCode = buf.read2Unsigned();
+	const code: ChatOpCode = buf.readOpcode();
 
 	if (code == ChatOpCode.Connect)
 		connect(client);
@@ -132,4 +161,8 @@ export function acceptChatOpCode(buf: ByteBuffer, client: WebSocket) {
 		accpetPublicSearch(buf);
 	else if (code == ChatOpCode.Invite)
 		accpetInvite(buf);
+	else if (code == ChatOpCode.Enter)
+		acceptEnter(buf);
+	else if (code == ChatOpCode.Part)
+		acceptPart(buf);
 }

@@ -9,10 +9,11 @@ export enum ChatOpCode {
 	Create,
 	Invite,
 	Join,
+	Enter,
 	PublicSearch,
-	Auth,
 	Part,
 	Chat,
+	Auth,
 }
 
 export enum ChatRightCode {
@@ -37,6 +38,11 @@ export enum JoinCode {
 export enum CreatCode {
 	Creater,
 	Inviter
+}
+
+export enum PartCode {
+	Accept,
+	Part
 }
 
 

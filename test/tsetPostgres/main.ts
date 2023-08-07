@@ -1,5 +1,4 @@
 import { PrismaClient } from "@prisma/client";
-``
 
 const prisma = new PrismaClient
 
@@ -18,15 +17,23 @@ const prisma = new PrismaClient
 // }
 
 async function main() {
-	const user = await prisma.user.findMany({
-		orderBy: {
-			id: 'desc'
+	const user = await prisma.user.findUnique({
+		where: {
+			id: 1
+		},
+		select: {
+			preference: {
+				select: {
+					prefer: true
+				}
+			}
 		}
 	})
+	// const user = await prisma.preference.findMany()
 	// const users = new Map();
 	// const arr = [1, 2, 3];
 	// users.set('1a', 1).set('2b', 2).set('3b', 3);
-	console.log(user);
+	console.log(user?.preference.length);
 	// for (let user of users)
 	// 	console.log(arr.includes(user[1]));
 }
