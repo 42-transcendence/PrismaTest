@@ -19,8 +19,10 @@ model User {
 }
 
 model preference {
-  id     Int    @id @default(autoincrement())
+  id     Int
   prefer String
   userId Int
   user   User   @relation(fields: [userId], references: [id])
+
+  @@id([id, userId])
 }

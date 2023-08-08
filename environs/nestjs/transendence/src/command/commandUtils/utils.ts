@@ -2,6 +2,7 @@ import { ByteBuffer } from "libs/byte-buffer";
 import { $Enums, Prisma } from "@prisma/client";
 import { ChatMemberEntity } from "src/generated/model";
 import { NULL_UUID } from "libs/uuid";
+import { ChatWebSocket } from "src/new-chat/chatSocket";
 
 export enum ChatOpCode {
 	Connect,
@@ -13,6 +14,7 @@ export enum ChatOpCode {
 	Enter,
 	PublicSearch,
 	Part,
+	Kick,
 	Chat,
 }
 
@@ -49,12 +51,38 @@ export enum PartCode {
 	Part
 }
 
+export enum KickCode {
+	Accept,
+	Reject,
+}
+
+//utils
 
 export function CreateChatMemberArray(chatRoomId: number, memberList: number[]): ChatMemberEntity[] {
 	const arr: ChatMemberEntity[] = [];
 	for (let i of memberList)
 		arr.push({ chatId: chatRoomId, accountId: i, modeFlags: ChatMemberModeFlags.Normal });
 	return arr;
+}
+
+export function addRoomInClientSocket(client: ChatWebSocket, roomUUID: string, modeFlags: number) {
+	client.rooms.push({ roomUUID, modeFlags });
+}
+
+export function addRoomsInClientSocket(client: ChatWebSocket, rooms: ChatWithoutId[]) {
+	for (let room of rooms) {
+		for (let member of room.members) {
+			if (member.account.uuid == client.userUUID)
+				client.rooms.push({ roomUUID: room.uuid, modeFlags: member.modeFlags });
+		}
+	}
+}
+
+export function deleteRoomInClientSocket(client: ChatWebSocket, roomUUID: string) {
+	for (let i = 0; i < client.rooms.length; ++i) {
+		if (client.rooms[i].roomUUID == roomUUID)
+			client.rooms.splice(i, 1);
+	}
 }
 
 //chatWhitoutIdUuid
@@ -69,26 +97,26 @@ const chatWhitoutIdUuid = Prisma.validator<Prisma.ChatDefaultArgs>()({
 });
 export type ChatWithoutIdUuid = Prisma.ChatGetPayload<typeof chatWhitoutIdUuid>
 
-export function writeChatAndMemebers(buf: ByteBuffer, room: ChatWithoutIdUuid, members: number[]): ByteBuffer {
+export function writeChatAndMemebers(buf: ByteBuffer, room: ChatWithoutIdUuid, members: string[]): ByteBuffer {
 	buf.write4Unsigned(room.modeFlags);
 	buf.write4Unsigned(room.limit);
 	buf.writeString(room.title);
 	buf.writeString(room.password);
 	buf.write2Unsigned(members.length);
 	for (let member of members)
-		buf.write4(member)
+		buf.writeString(member)
 	return buf;
 }
 
-export function readChatAndMemebers(buf: ByteBuffer): { chat: ChatWithoutIdUuid, members: number[] } {
+export function readChatAndMemebers(buf: ByteBuffer): { chat: ChatWithoutIdUuid, members: string[] } {
 	const modeFlags = buf.read4Unsigned();
 	const limit = buf.read4Unsigned();
 	const title = buf.readString();
 	const password = buf.readString();
 	const membersSize = buf.read2Unsigned();
-	const members: number[] = [];
+	const members: string[] = [];
 	for (let i = 0; i < membersSize; ++i)
-		members.push(buf.read4());
+		members.push(buf.readString());
 	return {
 		chat: {
 			modeFlags,
@@ -121,7 +149,8 @@ const chatWhitoutId = Prisma.validator<Prisma.ChatDefaultArgs>()({
 						uuid: true,
 						avatarKey: true
 					}
-				}
+				},
+				modeFlags: true
 			},
 			orderBy: {
 				accountId: 'asc'
@@ -202,8 +231,8 @@ export function readChats(buf: ByteBuffer): ChatWithoutId[] {
 			limit: buf.read4Unsigned(),
 			title: buf.readString(),
 			password: buf.readString(),
-			members: readAccountInChats(buf),
-			messages: [readChatMessage(buf)]
+			messages: [readChatMessage(buf)],
+			members: readAccountInChats(buf)
 		})
 	}
 	return rooms;
@@ -211,6 +240,7 @@ export function readChats(buf: ByteBuffer): ChatWithoutId[] {
 
 export class accountInChat {
 	account: { uuid: string, avatarKey: string | null };
+	modeFlags: number;
 }
 
 function writeAccountInChats(buf: ByteBuffer, accounts: accountInChat[]) {
@@ -224,6 +254,7 @@ function writeAccountInChats(buf: ByteBuffer, accounts: accountInChat[]) {
 		}
 		else
 			buf.writeBoolean(false);
+		buf.write4Unsigned(accounts[i].modeFlags);
 	}
 	return buf;
 }
@@ -237,7 +268,8 @@ function readAccountInChats(buf: ByteBuffer): accountInChat[] {
 		if (buf.readBoolean()) {
 			avatarKey = buf.readString();
 		}
-		accounts.push({ account: { uuid, avatarKey } })
+		const modeFlags = buf.read4Unsigned();
+		accounts.push({ account: { uuid, avatarKey }, modeFlags })
 	}
 	return accounts;
 }
@@ -511,21 +543,21 @@ export function readRoomJoinInfo(buf: ByteBuffer): { uuid: string, password: str
 }
 
 // use invite
-export function writeInviteMembers(buf: ByteBuffer, invitation: { chatUUID: string, members: number[] }) {
-	buf.writeString(invitation.chatUUID)
-	buf.write2(invitation.members.length);
-	for (let i = 0; i < invitation.members.length; ++i) {
-		buf.write4Unsigned(invitation.members[i]);
+export function writeMembersAndChatUUID(buf: ByteBuffer, list: { chatUUID: string, members: string[] }) {
+	buf.writeString(list.chatUUID)
+	buf.write2(list.members.length);
+	for (let i = 0; i < list.members.length; ++i) {
+		buf.writeString(list.members[i]);
 	}
 	return buf;
 }
 
-export function readInviteMembers(buf: ByteBuffer): { chatUUID: string, members: number[] } {
-	const members: number[] = [];
+export function readMembersAndChatUUID(buf: ByteBuffer): { chatUUID: string, members: string[] } {
+	const members: string[] = [];
 	const chatUUID = buf.readString();
 	const size = buf.read2();
 	for (let i = 0; i < size; ++i) {
-		members.push(buf.read4Unsigned());
+		members.push(buf.readString());
 	}
 	return {
 		chatUUID,

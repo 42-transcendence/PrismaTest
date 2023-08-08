@@ -7,10 +7,9 @@ import { ChatWebSocket } from "src/new-chat/chatSocket";
 import { jwtVerifyHMAC } from "libs/jwt";
 import { encodeUTF8 } from "libs/utf8";
 import { CustomException } from "src/command/commandUtils/exception";
-import { AccountWithUuid, ChatMemberModeFlags, ChatRoomMode, ChatWithoutIdUuid, CreatCode, CreateChatMemberArray, RoomInfo, readChatAndMemebers, readInviteMembers, readRoomJoinInfo, writeChatMemberAccount, writeRoominfo, writeChat, wrtieChats, writeAccountWithUuids, PartCode } from "./commandUtils/utils";
+import { AccountWithUuid, ChatMemberModeFlags, ChatRoomMode, ChatWithoutIdUuid, CreatCode, CreateChatMemberArray, RoomInfo, readChatAndMemebers, readMembersAndChatUUID, readRoomJoinInfo, writeChatMemberAccount, writeRoominfo, writeChat, wrtieChats, writeAccountWithUuids, PartCode, addRoomsInClientSocket, addRoomInClientSocket, KickCode, writeMembersAndChatUUID } from "./commandUtils/utils";
 import { ChatOpCode, ChatWithoutId, JoinCode } from "./commandUtils/utils";
 import { ChatEntity } from "src/generated/model";
-
 
 @Injectable()
 export class CommandService {
@@ -53,7 +52,8 @@ export class CommandService {
 										uuid: true,
 										avatarKey: true
 									}
-								}
+								},
+								modeFlags: true
 							},
 							orderBy: {
 								accountId: 'asc'
@@ -83,6 +83,9 @@ export class CommandService {
 		for (let room of roomList)
 			chatList.push(room.chat);
 		wrtieChats(buf, chatList);
+		//client 내부에 roomUUID, modeFlags를 추가
+		addRoomsInClientSocket(client, chatList);
+		//
 		client.send(buf.toArray());
 	}
 
@@ -113,11 +116,24 @@ export class CommandService {
 		client.send(buf.toArray());
 	}
 
-	async createRoom(buf: ByteBuffer, client: ChatWebSocket, clients: Set<ChatWebSocket>) {
-		const createInfo: { chat: ChatWithoutIdUuid, members: number[] } = readChatAndMemebers(buf)
+	async create(buf: ByteBuffer, client: ChatWebSocket, clients: Set<ChatWebSocket>) {
+		const createInfo: { chat: ChatWithoutIdUuid, members: string[] } = readChatAndMemebers(buf)
 		const newRoom: ChatEntity = await this.prismaService.chat.create({
 			data: createInfo.chat,
 		});
+		const accounts = await this.prismaService.account.findMany({
+			where: {
+				uuid: { in: createInfo.members }
+			},
+			select: {
+				id: true
+			}
+		});
+		//초대할 유저들의 id리스트 생성
+		const memberList: number[] = [];
+		for (let account of accounts) {
+			memberList.push(account.id);
+		}
 		//room & chatMemberCreate
 		await this.prismaService.chatMember.create({
 			data: {
@@ -127,7 +143,7 @@ export class CommandService {
 			}
 		})
 		await this.prismaService.chatMember.createMany({
-			data: CreateChatMemberArray(newRoom.id, createInfo.members),
+			data: CreateChatMemberArray(newRoom.id, memberList),
 		})
 
 		//roomInformation추출
@@ -159,6 +175,13 @@ export class CommandService {
 				},
 			}
 		})
+		//client 내부에 roomUUID, modeFlags를 추가
+		if (roomInfo) {
+			for (let i = 0; i < roomInfo.members.length; ++i) {
+				if (roomInfo.members[i].account.uuid == client.userUUID)
+					addRoomInClientSocket(client, roomInfo?.uuid, roomInfo.members[i].modeFlags);
+			}
+		}
 		//Creater와 Inviter에게 roomInformation 전달
 		const sendCreaterBuf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Create);
 		const sendInivterBuf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Create);
@@ -172,12 +195,12 @@ export class CommandService {
 			throw new CustomException('존재하지 않는 채팅방입니다.')
 		client.send(sendCreaterBuf.toArray());
 		for (let otherClient of clients) {
-			if (createInfo.members.includes(otherClient.userId))
+			if (createInfo.members.includes(otherClient.userUUID))
 				otherClient.send(sendInivterBuf.toArray());
 		}
 	}
 
-	async joinRoom(buf: ByteBuffer, client: ChatWebSocket, clients: Set<ChatWebSocket>) {
+	async join(buf: ByteBuffer, client: ChatWebSocket, clients: Set<ChatWebSocket>) {
 		const roomJoinInfo: { uuid: string, password: string } = readRoomJoinInfo(buf);
 		const chatRoom = await this.prismaService.chat.findUnique({
 			where: {
@@ -246,6 +269,13 @@ export class CommandService {
 				}
 			}
 		});
+		//client 내부에 roomUUID, modeFlags를 추가
+		if (roomInfo) {
+			for (let i = 0; i < roomInfo.members.length; ++i) {
+				if (roomInfo.members[i].account.uuid == client.userUUID)
+					addRoomInClientSocket(client, roomInfo?.uuid, roomInfo.members[i].modeFlags);
+			}
+		}
 		//Accept
 		const sendAcceptBuf = ByteBuffer.createWithOpcode(ChatOpCode.Join);
 		sendAcceptBuf.write1(JoinCode.Accept);
@@ -297,7 +327,8 @@ export class CommandService {
 								uuid: true,
 								avatarKey: true
 							}
-						}
+						},
+						modeFlags: true
 					},
 					orderBy: {
 						accountId: 'asc'
@@ -328,7 +359,15 @@ export class CommandService {
 	}
 
 	async invite(client: ChatWebSocket, clients: Set<ChatWebSocket>, buf: ByteBuffer) {
-		const invitation: { chatUUID: string, members: number[] } = readInviteMembers(buf);
+		const invitation: { chatUUID: string, members: string[] } = readMembersAndChatUUID(buf);
+		const accounts = await this.prismaService.account.findMany({
+			where: {
+				uuid: { in: invitation.members }
+			},
+			select: {
+				id: true
+			}
+		});
 		//권한이 없으면 초대 거부
 		const room = await this.prismaService.chat.findUnique({
 			where: {
@@ -347,13 +386,19 @@ export class CommandService {
 				}
 			}
 		})
+		//초대할 유저들의 id리스트 생성
+		const memberList: number[] = [];
+		for (let account of accounts) {
+			memberList.push(account.id);
+		}
+		//
 		if (!room)
 			throw new CustomException('채팅방이 존재하지 않습니다.');
 		if (room.members[0].modeFlags == ChatMemberModeFlags.Normal)
 			throw new CustomException('초대 권한이 없습니다.');
 		//chatMember add
 		await this.prismaService.chatMember.createMany({
-			data: CreateChatMemberArray(room?.id, invitation.members)
+			data: CreateChatMemberArray(room?.id, memberList)
 		});
 		//roomInformation추출
 		const roomInfo: ChatWithoutId | null = await this.prismaService.chat.findUnique({
@@ -373,7 +418,8 @@ export class CommandService {
 								uuid: true,
 								avatarKey: true
 							}
-						}
+						},
+						modeFlags: true,
 					},
 					orderBy: {
 						accountId: 'asc'
@@ -397,7 +443,17 @@ export class CommandService {
 					take: 1
 				}
 			},
-		});
+		});//초대받을 client 내부에 roomUUID, modeFlags를 추가
+		if (roomInfo) {
+			for (let invitedClient of clients) {
+				if (invitation.members.includes(invitedClient.userUUID)) {
+					for (let i = 0; i < roomInfo.members.length; ++i) {
+						if (roomInfo.members[i].account.uuid == invitedClient.userUUID)
+							addRoomInClientSocket(invitedClient, roomInfo?.uuid, roomInfo.members[i].modeFlags);
+					}
+				}
+			}
+		}
 		const sendBuf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Invite);
 		if (roomInfo) {
 			writeChat(sendBuf, roomInfo);
@@ -405,7 +461,7 @@ export class CommandService {
 		else
 			throw new CustomException('존재하지 않는 채팅방입니다.')
 		for (let otherClient of clients) {
-			if (invitation.members.includes(otherClient.userId))
+			if (invitation.members.includes(otherClient.userUUID))
 				otherClient.send(sendBuf.toArray());
 		}
 	}
@@ -464,7 +520,7 @@ export class CommandService {
 		client.send(sendBuf.toArray());
 	}
 
-	async partRoom(buf: ByteBuffer, client: ChatWebSocket, clients: Set<ChatWebSocket>) {
+	async part(buf: ByteBuffer, client: ChatWebSocket, clients: Set<ChatWebSocket>) {
 		const roomUUID = buf.readString();
 		//chat id/인원수/member의 권한 추출
 		const room = await this.prismaService.chat.findUnique({
@@ -490,12 +546,19 @@ export class CommandService {
 			}
 		})
 		//나가는 방에 혼자있으면 방 삭제
-		if (room.members.length == 1)
+		if (room.members.length == 1) {
 			await this.prismaService.chat.delete({
 				where: {
 					uuid: roomUUID
 				}
 			});
+			//나가는 방에 모든 채팅 기록 삭제
+			await this.prismaService.chatMessage.deleteMany({
+				where: {
+					chatId: room.id
+				}
+			})
+		}
 		//TODO: 나가는 유저의 권한이 admin일때 어떻게 admin 권한을 넘길것인가?
 		else if (room.members[0].modeFlags == ChatMemberModeFlags.Admin) { }//
 		// Part user에 보낼 buf
@@ -514,5 +577,70 @@ export class CommandService {
 		for (let otherClient of clients)
 			if (roomUserUUIDs.includes(otherClient.userId))
 				otherClient.send(sendOtherUserBuf.toArray());
+		//client 내부에 roomUUID, modeFlags를 삭제
+		for (let i = 0; i < client.rooms.length; ++i) {
+			if (client.rooms[i].roomUUID == roomUUID)
+				client.rooms.splice(i, 1);
+		}
+	}
+
+	async kick(buf: ByteBuffer, client: ChatWebSocket, clients: Set<ChatWebSocket>) {
+		const kickList: { chatUUID: string, members: string[] } = readMembersAndChatUUID(buf);
+		//Reject
+		for (let room of client.rooms) {
+			const sendRejectBuf = ByteBuffer.createWithOpcode(ChatOpCode.Kick);
+			if (room.roomUUID == kickList.chatUUID && room.modeFlags != 4) {
+				sendRejectBuf.write1(KickCode.Reject);
+				client.send(sendRejectBuf.toArray());
+				return;
+			}
+
+		}
+		//Accept
+		const room = await this.prismaService.chat.findUnique({
+			where: {
+				uuid: kickList.chatUUID,
+			},
+			select: {
+				id: true,
+				members: {
+					select: {
+						accountId: true
+					}
+				}
+			}
+		});
+		if (!room)
+			throw new CustomException('채팅방이 존재하지 않습니다.')
+		const roomMembers: number[] = [];
+		for (let member of room.members) {
+			roomMembers.push(member.accountId);
+		}
+		const accounts = await this.prismaService.account.findMany({
+			where: {
+				uuid: { in: kickList.members }
+			},
+			select: {
+				id: true
+			}
+		});
+		const kickMembers: number[] = [];
+		for (let account of accounts) {
+			kickMembers.push(account.id);
+		}
+		await this.prismaService.chatMember.deleteMany({
+			where: {
+				chatId: room.id,
+				accountId: { in: kickMembers }
+			}
+		})
+		for (let _client of clients) {
+			if (roomMembers.includes(_client.userId)) {
+				const sendBuf = ByteBuffer.createWithOpcode(ChatOpCode.Kick);
+				sendBuf.write1(KickCode.Accept);
+				writeMembersAndChatUUID(sendBuf, kickList);
+				_client.send(sendBuf.toArray());
+			}
+		}
 	}
 }

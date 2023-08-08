@@ -1,5 +1,5 @@
 import { ByteBuffer } from "libs/byte-buffer";
-import { ChatOpCode, ChatWithoutId, ChatWithoutIdUuid, RoomInfo, readChats, readRoominfo, writeChatAndMemebers, writeRoomJoinInfo, JoinCode, ChatMessageWithChatUuid, CreatCode, readChatMemberAccount, writeInviteMembers, readChat, AccountWithUuid, readAccountWithUuids, PartCode, accountInChat } from "./utils";
+import { ChatOpCode, ChatWithoutId, ChatWithoutIdUuid, RoomInfo, readChats, readRoominfo, writeChatAndMemebers, writeRoomJoinInfo, JoinCode, ChatMessageWithChatUuid, CreatCode, readChatMemberAccount, writeMembersAndChatUUID, readChat, AccountWithUuid, readAccountWithUuids, PartCode, accountInChat, KickCode, readMembersAndChatUUID } from "./utils";
 import { CustomException } from "src/command/commandUtils/exception";
 
 export function sendConnectMessage(client: WebSocket) {
@@ -12,7 +12,7 @@ export function sendConnectMessage(client: WebSocket) {
 	client.send(buf.toArray());
 }
 
-export function sendCreateRoom(client: WebSocket, room: ChatWithoutIdUuid, members: number[]) {
+export function sendCreateRoom(client: WebSocket, room: ChatWithoutIdUuid, members: string[]) {
 	const buf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Create);
 	writeChatAndMemebers(buf, room, members);
 	client.send(buf.toArray());
@@ -24,10 +24,10 @@ export function snedJoinRoom(client: WebSocket, room: { uuid: string, password: 
 	client.send(buf.toArray())
 }
 
-export function sendInvite(client: WebSocket, invitation: { chatUUID: string, members: number[] }) {
+export function sendInvite(client: WebSocket, invitation: { chatUUID: string, members: string[] }) {
 	//초대권한이 있는지 확인해함.
 	const buf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Invite);
-	writeInviteMembers(buf, invitation);
+	writeMembersAndChatUUID(buf, invitation);
 	client.send(buf.toArray());
 }
 
@@ -43,12 +43,18 @@ export function sendPart(client: WebSocket, roomUUID: string) {
 	client.send(buf.toArray());
 }
 
+export function sendKick(client: WebSocket, kickList: { chatUUID: string, members: string[] }) {
+	const buf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.Kick);
+	writeMembersAndChatUUID(buf, kickList);
+	client.send(buf.toArray());
+}
+
 //utils
 function addRoomList(room: RoomInfo) {
 	const message: ChatMessageWithChatUuid[] = [];
 	const members: accountInChat[] = [];
 	for (let member of room.members)
-		members.push({ account: { uuid: member.account.uuid, avatarKey: member.account.avatarKey } })
+		members.push({ account: { uuid: member.account.uuid, avatarKey: member.account.avatarKey }, modeFlags: member.modeFlags })
 	if (room.messages)
 		message.push(room.messages[0]);
 	const addRoom: ChatWithoutId = {
@@ -106,7 +112,7 @@ export function accpetJoin(buf: ByteBuffer) {
 		const rooms: ChatWithoutId[] = JSON.parse(String(window.localStorage.getItem('rooms')));
 		for (let i = 0; i < rooms.length; ++i) {
 			if (rooms[i].uuid == uuid) {
-				rooms[i].members.push({ account: { uuid: member.account.uuid, avatarKey: member.account.avatarKey } })
+				rooms[i].members.push({ account: { uuid: member.account.uuid, avatarKey: member.account.avatarKey }, modeFlags: member.modeFlags })
 				break;
 			}
 		}
@@ -176,6 +182,16 @@ export function acceptPart(buf: ByteBuffer) {
 	window.localStorage.setItem('rooms', JSON.stringify(rooms));
 }
 
+export function acceptKick(buf: ByteBuffer) {
+	const code = buf.read1();
+	if (code == KickCode.Reject) { }
+	else if (code == KickCode.Accept) {
+		const kickList: { chatUUID: string, members: string[] } = readMembersAndChatUUID(buf);
+		const rooms: ChatWithoutId[] = JSON.parse(String(window.localStorage.getItem('rooms')));
+		const nowRoom: RoomInfo = JSON.parse(String(window.localStorage.getItem('nowChatInfo')));
+	}
+}
+
 export function acceptChatOpCode(buf: ByteBuffer, client: WebSocket) {
 	const code: ChatOpCode = buf.readOpcode();
 
@@ -195,4 +211,6 @@ export function acceptChatOpCode(buf: ByteBuffer, client: WebSocket) {
 		acceptEnter(buf);
 	else if (code == ChatOpCode.Part)
 		acceptPart(buf);
+	else if (code == ChatOpCode.Kick)
+		acceptKick(buf);
 }
