@@ -62,16 +62,19 @@ function makeNowChatRoom(chatUUID: string): NowChatRoom {
 	for (let i = 0; i < chatRooms.length; i++) {
 		if (chatRooms[i].uuid == chatUUID) {
 			nowChatRoom.chatRoom = chatRooms[i];
+			break;
 		}
 	}
 	for (let i = 0; i < chatMembersList.length; i++) {
 		if (chatMembersList[i].chatUUID == chatUUID) {
 			nowChatRoom.members = chatMembersList[i];
+			break;
 		}
 	}
 	for (let i = 0; i < chatMEssagesList.length; i++) {
 		if (chatMEssagesList[i].chatUUID == chatUUID) {
 			nowChatRoom.messages = chatMEssagesList[i];
+			break;
 		}
 	}
 	return (nowChatRoom);
@@ -274,7 +277,7 @@ export function acceptPart(buf: ByteBuffer) {
 	else if (code == PartCode.PART) {
 		const accountUUID = buf.readString();
 		deleteChatMember(chatUUID, accountUUID);
-		if (nowChatRoom.chatRoom?.uuid == chatUUID) {
+		if (nowChatRoom && nowChatRoom.chatRoom?.uuid == chatUUID) {
 			setNowChatRoom(chatUUID)
 		}
 	}
