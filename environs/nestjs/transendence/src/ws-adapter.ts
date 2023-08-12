@@ -8,10 +8,10 @@ import {
 } from "@nestjs/websockets/constants";
 import { MessageMappingProperties } from "@nestjs/websockets/gateway-metadata-explorer";
 import * as http from "http";
+import { ByteBuffer } from "@libs/byte-buffer";
 import { EMPTY, fromEvent, Observable } from "rxjs";
 import { filter, first, mergeMap, share, takeUntil } from "rxjs/operators";
 import { WebSocketServer, WebSocket } from "ws";
-import { ByteBuffer } from "libs/byte-buffer"; 
 
 enum WsReadyState {
   CONNECTING = WebSocket.CONNECTING,
@@ -113,13 +113,14 @@ export class WsAdapter extends AbstractWsAdapter {
       if (client.readyState !== WsReadyState.OPEN) {
         return;
       }
-      if (!(response instanceof ByteBuffer)) {
-        // not WsResponsePayload
-        throw undefined;
+      // WsResponsePayload
+      if (response instanceof ByteBuffer) {
+        const message: WsResponsePayload = response;
+        const data: WsRawPayload = message.toArray(); // Transform
+        client.send(data);
+      } else {
+        throw new TypeError("Unknown WebSocket response type");
       }
-      const message: WsResponsePayload = response;
-      const data: WsRawPayload = message.toArray(); // Transform
-      client.send(data);
     };
     source$.subscribe(onMessage);
   }
@@ -141,10 +142,9 @@ export class WsAdapter extends AbstractWsAdapter {
       }
       const data: WsRawPayload = buffer.data;
       const request: WsRequestPayload = ByteBuffer.from(data); // Transform
-      const opcode: number = request.read2Unsigned();
-      const message = opcode;
+      const message = request.readOpcode();
       const messageHandler = handlers.find(
-        (handler) => handler.message == message,
+        (handler) => handler.message === message,
       );
       if (!messageHandler) {
         throw undefined;

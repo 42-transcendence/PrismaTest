@@ -1,7 +1,7 @@
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-  schemas  = ["services_test", "resources_test"]
+  schemas  = ["services", "resources"]
 }
 
 generator client {
@@ -28,7 +28,7 @@ enum Role {
   ADMINISTRATOR
 
   @@map("role")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 enum RegistrationState {
@@ -38,7 +38,7 @@ enum RegistrationState {
   UNREGISTERED
 
   @@map("registration_state")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 enum ActiveStatus {
@@ -50,7 +50,7 @@ enum ActiveStatus {
   GAME
 
   @@map("active_status")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model Account {
@@ -98,7 +98,7 @@ model Account {
   @@unique([authIssuer, authSubject])
   @@index([nickName, nickTag])
   @@map("accounts")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model Authorization {
@@ -108,7 +108,7 @@ model Authorization {
   createdTimestamp DateTime @default(now())
 
   @@map("authorizations")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model Session {
@@ -123,7 +123,7 @@ model Session {
   isValid          Boolean  @default(true)
 
   @@map("sessions")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model Device {
@@ -139,7 +139,7 @@ model Device {
 
   @@index([updatedTimestamp])
   @@map("devices")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model Record {
@@ -155,7 +155,7 @@ model Record {
   @@index([skillRating(sort: Asc)])
   @@index([gameStatistics(ops: JsonbOps)], type: Gin)
   @@map("records")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model Achievement {
@@ -166,7 +166,7 @@ model Achievement {
 
   @@id([accountId, achievementId])
   @@map("achievements")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model Friend {
@@ -179,7 +179,7 @@ model Friend {
 
   @@id(fields: [accountId, friendAccountId])
   @@map("friends")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model Enemy {
@@ -191,7 +191,7 @@ model Enemy {
 
   @@id(fields: [accountId, enemyAccountId])
   @@map("enemies")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model Ban {
@@ -206,7 +206,7 @@ model Ban {
   bannedTimestamp  DateTime  @default(now())
 
   @@map("bans")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model Chat {
@@ -220,7 +220,7 @@ model Chat {
   messages  ChatMessage[]
 
   @@map("chats")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model ChatMember {
@@ -232,7 +232,7 @@ model ChatMember {
 
   @@id([chatId, accountId])
   @@map("chat_members")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model ChatMessage {
@@ -247,7 +247,7 @@ model ChatMessage {
 
   @@index([timestamp(ops: TimestampMinMaxOps)], type: Brin)
   @@map("chat_messages")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model ChatBan {
@@ -262,7 +262,7 @@ model ChatBan {
   bannedTimestamp  DateTime  @default(now())
 
   @@map("chat_bans")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model Game {
@@ -278,7 +278,7 @@ model Game {
   members     GameMember[]
 
   @@map("games")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model GameMember {
@@ -291,7 +291,7 @@ model GameMember {
 
   @@id([gameId, accountId])
   @@map("game_members")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model GameQueue {
@@ -303,7 +303,7 @@ model GameQueue {
   @@index([skillRating])
   @@index([timestamp])
   @@map("game_queue")
-  @@schema("services_test")
+  @@schema("services")
 }
 
 model GameHistory {
@@ -320,5 +320,5 @@ model GameHistory {
   @@index([statistic(ops: JsonbOps)], type: Gin)
   @@index([memberStatistics(ops: JsonbOps)], type: Gin)
   @@map("game_history")
-  @@schema("services_test")
+  @@schema("services")
 }

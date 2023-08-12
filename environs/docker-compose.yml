@@ -49,7 +49,7 @@ services:
   nestjs:
     depends_on:
       - database
-    build: 
+    build:
       context: ./nestjs
       dockerfile: dockerfile
     container_name: nestjs
@@ -57,15 +57,14 @@ services:
     environment:
       - NODE_ENV=production
     ports:
-      - 3000:3000
-      - 3005:3005
-      - 5000:5000
+      - 3001:3001
+      - 5556:5555
     expose:
       - "5432"
     volumes:
-       - type: bind
-         source: ./nestjs/transendence
-         target: /home/node/app
+      - type: bind
+        source: ./nestjs/transendence
+        target: /home/node/app
     networks:
       - database_network
 
@@ -73,9 +72,11 @@ networks:
   http_network:
   database_network:
 
+
 volumes:
   database_volume:
   dbadmin_volume:
+
 
 secrets:
   postgres_password:
