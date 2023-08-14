@@ -137,7 +137,6 @@ export class ChatService {
 				chatId,
 				accountId,
 				modeFlags,
-
 			}
 		}));
 	}
