@@ -286,7 +286,7 @@ export class ChatSocket {
 		//Reject
 		for (let room of client.rooms) {
 			const sendRejectBuf = ByteBuffer.createWithOpcode(ChatOpCode.KICK);
-			if (room.roomUUID == kickList.chatUUID && room.modeFlags != 0) {
+			if (room.roomUUID == kickList.chatUUID && room.modeFlags != 4) {
 				sendRejectBuf.write1(KickCode.REJCET);
 				client.send(sendRejectBuf.toArray());
 				return;

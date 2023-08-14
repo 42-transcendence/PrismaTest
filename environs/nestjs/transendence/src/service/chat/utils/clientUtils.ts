@@ -1,10 +1,10 @@
 import { ByteBuffer } from "@libs/byte-buffer";
-import { ChatOpCode, writeRoomJoinInfo, JoinCode, CreatCode, PartCode, KickCode, CreateChatMessaage, writeCreateChatMessaage, ChatRoom, ChatMembers, ChatMessages, readChatRooms, readChatMembersList, readChatMessagesList, readAccounts, Account, NowChatRoom, MemberWithModeFlags, Message, readMessage, CreateChat, writeCreateChat, writeChatUUIDAndMemberUUIDs, ChatUUIDAndMemberUUIDs, readChatUUIDAndMemberUUIDs, readChatMembers, readChatRoom, readChatMessages, readMemberWithModeFlags } from "./utils";
+import { ChatOpCode, writeRoomJoinInfo, JoinCode, CreatCode, PartCode, KickCode, CreateChatMessaage, writeCreateChatMessaage, ChatRoom, ChatMembers, ChatMessages, readChatRooms, readChatMembersList, readChatMessagesList, readAccounts, Account, NowChatRoom, MemberWithModeFlags, Message, readMessage, CreateChat, writeCreateChat, writeChatUUIDAndMemberUUIDs, ChatUUIDAndMemberUUIDs, readChatUUIDAndMemberUUIDs, readChatMembers, readChatRoom, readChatMessages, readMemberWithModeFlags, InviteCode, readMembersWithModeFlags } from "./utils";
 
 export function sendConnectMessage(client: WebSocket) {
 	const buf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.CONNECT);
-	const jwt = window.localStorage.getItem('jwt');
-	if (jwt)
+	const jwt = window.localStorage.getItem('access_token');
+	if (jwt != null)
 		buf.writeString(jwt);
 	else
 		throw new Error('로그인 상태가 아닙니다.')
@@ -17,7 +17,7 @@ export function sendCreateRoom(client: WebSocket, room: CreateChat) {
 	client.send(buf.toArray());
 }
 
-export function snedJoinRoom(client: WebSocket, room: { uuid: string, password: string }) {
+export function sendJoinRoom(client: WebSocket, room: { uuid: string, password: string }) {
 	const buf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.JOIN)
 	writeRoomJoinInfo(buf, room);
 	client.send(buf.toArray())
@@ -57,7 +57,7 @@ export function sendChat(client: WebSocket, msg: CreateChatMessaage) {
 function makeNowChatRoom(chatUUID: string): NowChatRoom {
 	const chatRooms: ChatRoom[] = JSON.parse(String(window.localStorage.getItem('chatRooms')));
 	const chatMembersList: ChatMembers[] = JSON.parse(String(window.localStorage.getItem('chatMembersList')));
-	const chatMEssagesList: ChatMessages[] = JSON.parse(String(window.localStorage.getItem('chatMEssagesList')));
+	const chatMessagesList: ChatMessages[] = JSON.parse(String(window.localStorage.getItem('chatMessagesList')));
 	const nowChatRoom: NowChatRoom = { chatRoom: null, members: null, messages: null };
 	for (let i = 0; i < chatRooms.length; i++) {
 		if (chatRooms[i].uuid == chatUUID) {
@@ -71,9 +71,9 @@ function makeNowChatRoom(chatUUID: string): NowChatRoom {
 			break;
 		}
 	}
-	for (let i = 0; i < chatMEssagesList.length; i++) {
-		if (chatMEssagesList[i].chatUUID == chatUUID) {
-			nowChatRoom.messages = chatMEssagesList[i];
+	for (let i = 0; i < chatMessagesList.length; i++) {
+		if (chatMessagesList[i].chatUUID == chatUUID) {
+			nowChatRoom.messages = chatMessagesList[i];
 			break;
 		}
 	}
@@ -83,7 +83,7 @@ function makeNowChatRoom(chatUUID: string): NowChatRoom {
 function addChatRoom(newChatRoom: ChatRoom) {
 	const chatRooms: ChatRoom[] = JSON.parse(String(window.localStorage.getItem('chatRooms')));
 	chatRooms.push(newChatRoom);
-	window.localStorage.setItem('chatRoomst', JSON.stringify(chatRooms));
+	window.localStorage.setItem('chatRooms', JSON.stringify(chatRooms));
 }
 
 function deleteChatRoom(chatUUID: string) {
@@ -94,7 +94,7 @@ function deleteChatRoom(chatUUID: string) {
 			break;
 		}
 	}
-	window.localStorage.setItem('chatRoomst', JSON.stringify(chatRooms));
+	window.localStorage.setItem('chatRooms', JSON.stringify(chatRooms));
 }
 
 function addChatMembers(newChatMembers: ChatMembers) {
@@ -176,7 +176,7 @@ function setNowChatRoom(uuid: string) {
 
 //accept
 export function acceptConnect(client: WebSocket, buf: ByteBuffer) {
-	if (buf.readBoolean()) {
+	if (buf.readBoolean() == true) {
 		const sendBuf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.INFO);
 		client.send(sendBuf.toArray());
 	}
@@ -224,6 +224,7 @@ export function accpetJoin(buf: ByteBuffer) {
 		addChatRoom(chatRoom);
 		addChatMembers(chatMembers);
 		addChatMessages(chatMessages);
+		setNowChatRoom(chatRoom.uuid);
 	}
 	else if (code == JoinCode.NEW_JOIN) {
 		const uuid = buf.readString();
@@ -244,21 +245,35 @@ export function accpetPublicSearch(buf: ByteBuffer) {
 }
 
 export function accpetInvite(buf: ByteBuffer) {
-	const chatRoom = readChatRoom(buf);
-	const chatMembers = readChatMembers(buf);
-	const chatMessages = readChatMessages(buf);
-	addChatRoom(chatRoom);
-	addChatMembers(chatMembers);
-	addChatMessages(chatMessages);
+	const code = buf.read1();
+	const nowChatRoom: NowChatRoom = JSON.parse(String(window.localStorage.getItem('nowChatRoom')));
+	if (code == InviteCode.INVITER) {
+		const chatRoom = readChatRoom(buf);
+		const chatMembers = readChatMembers(buf);
+		const chatMessages = readChatMessages(buf);
+		addChatRoom(chatRoom);
+		addChatMembers(chatMembers);
+		addChatMessages(chatMessages);
+	}
+	else if (code == InviteCode.MEMBER) {
+		const chatUUID = buf.readString();
+		const invitedMembers: MemberWithModeFlags[] = readMembersWithModeFlags(buf);
+		for (let member of invitedMembers) {
+			addChatMember(chatUUID, member);
+		}
+		if (nowChatRoom && nowChatRoom.chatRoom?.uuid == chatUUID) {
+			setNowChatRoom(chatUUID);
+		}
+	}
 }
 
 export function acceptEnter(buf: ByteBuffer) {
 	const chatRoom = readChatRoom(buf);
-	const chatMembers = readChatMembers(buf);
-	const chatMessages = readChatMessages(buf);
-	addChatRoom(chatRoom);
-	addChatMembers(chatMembers);
-	addChatMessages(chatMessages);
+	// const chatMembers = readChatMembers(buf);
+	// const chatMessages = readChatMessages(buf);
+	// addChatRoom(chatRoom);
+	// addChatMembers(chatMembers);
+	// addChatMessages(chatMessages);
 	setNowChatRoom(chatRoom.uuid);
 }
 
@@ -267,7 +282,7 @@ export function acceptPart(buf: ByteBuffer) {
 	const chatUUID = buf.readString();
 	const nowChatRoom: NowChatRoom = JSON.parse(String(window.localStorage.getItem('nowChatRoom')));
 	if (code == PartCode.ACCEPT) {
-		if (nowChatRoom.chatRoom?.uuid == chatUUID) {
+		if (nowChatRoom && nowChatRoom.chatRoom?.uuid == chatUUID) {
 			window.localStorage.removeItem('nowChatRoom');
 		}
 		deleteChatRoom(chatUUID);
@@ -302,7 +317,7 @@ export function acceptKick(buf: ByteBuffer) {
 		for (let member of kickList.members) {
 			deleteChatMember(kickList.chatUUID, member);
 		}
-		if (nowChatRoom.chatRoom?.uuid == kickList.chatUUID) {
+		if (nowChatRoom && nowChatRoom.chatRoom?.uuid == kickList.chatUUID) {
 			setNowChatRoom(kickList.chatUUID);
 		}
 	}
@@ -325,6 +340,10 @@ export function acceptChatOpCode(buf: ByteBuffer, client: WebSocket) {
 		acceptConnect(client, buf);
 	else if (code == ChatOpCode.INFO)
 		acceptInfo(client, buf);
+	else if (code == ChatOpCode.FRIENDS)
+		acceptFriends(buf);
+	else if (code == ChatOpCode.CREATE)
+		acceptCreat(buf);
 	else if (code == ChatOpCode.JOIN)
 		accpetJoin(buf);
 	else if (code == ChatOpCode.PUBLIC_SEARCH)
