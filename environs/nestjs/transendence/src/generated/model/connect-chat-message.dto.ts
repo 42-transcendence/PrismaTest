@@ -1,5 +1,5 @@
 
   export class ConnectChatMessageModel {
-    id: bigint;
+    uuid: string;
   }
   

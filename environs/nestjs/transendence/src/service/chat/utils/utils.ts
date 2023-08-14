@@ -312,21 +312,25 @@ export function readAccounts(buf: ByteBuffer): Account[] {
 //MemberWithModeFlags Type
 export type MemberWithModeFlags = {
 	account: Account,
-	modeFalgs: number
+	modeFalgs: number,
+	lastMessageId: string
 }
 
 export function writeMemberWithModeFlags(buf: ByteBuffer, member: MemberWithModeFlags) {
 	writeAccount(buf, member.account);
 	buf.write4Unsigned(member.modeFalgs);
+	buf.writeUUID(member.lastMessageId);
 	return buf;
 }
 
 export function readMemberWithModeFlags(buf: ByteBuffer): MemberWithModeFlags {
 	const account: Account = readAccount(buf);
 	const modeFlags = buf.read4Unsigned();
+	const lastMessageId = buf.readUUID();
 	return ({
 		account: account,
-		modeFalgs: modeFlags
+		modeFalgs: modeFlags,
+		lastMessageId
 	})
 
 }
@@ -334,8 +338,9 @@ export function readMemberWithModeFlags(buf: ByteBuffer): MemberWithModeFlags {
 export function writeMembersWithModeFlags(buf: ByteBuffer, members: MemberWithModeFlags[]) {
 	buf.write4Unsigned(members.length); // members의 크기
 	for (let i = 0; i < members.length; i++) {
-		writeAccounts(buf, [members[i].account]);
+		writeAccount(buf, members[i].account);
 		buf.write4Unsigned(members[i].modeFalgs);
+		buf.writeUUID(members[i].lastMessageId);
 	}
 	return buf;
 }
@@ -344,11 +349,13 @@ export function readMembersWithModeFlags(buf: ByteBuffer): MemberWithModeFlags[]
 	const size = buf.read4Unsigned(); // members의 크기
 	const members: MemberWithModeFlags[] = [];
 	for (let i = 0; i < size; i++) {
-		const accounts: Account[] = readAccounts(buf);
+		const account: Account = readAccount(buf);
 		const modeFlags = buf.read4Unsigned();
+		const lastMessageId = buf.readUUID();
 		members.push({
-			account: accounts[0],
-			modeFalgs: modeFlags
+			account: account,
+			modeFalgs: modeFlags,
+			lastMessageId
 		})
 
 	}
@@ -401,7 +408,7 @@ export function readChatMembersList(buf: ByteBuffer): ChatMembers[] {
 //Message
 
 export type Message = {
-	id: bigint,
+	uuid: string,
 	accountUUID: string,
 	content: string,
 	modeFlags: number,
@@ -411,7 +418,7 @@ export type Message = {
 export function writeMessages(buf: ByteBuffer, messages: Message[]) {
 	buf.write4Unsigned(messages.length); // message의 갯수
 	for (let i = 0; i < messages.length; i++) {
-		buf.write8Unsigned(messages[i].id);
+		buf.writeString(messages[i].uuid);
 		buf.write4Unsigned(messages[i].modeFlags);
 		//TODO 익명플레그 구현 결정하기
 		if (!(messages[i].modeFlags & 4)) {
@@ -430,13 +437,13 @@ export function readMessages(buf: ByteBuffer): Message[] {
 	const size = buf.read4Unsigned(); // message의 갯수
 	const messages: Message[] = [];
 	for (let i = 0; i < size; i++) {
-		const id = buf.read8Unsigned();
+		const uuid = buf.readString();
 		const modeFlags = buf.read4Unsigned();
 		const accountUUID = buf.readUUID();
 		const content = buf.readString();
 		const timestamp = buf.readDate();
 		messages.push({
-			id,
+			uuid,
 			accountUUID,
 			content,
 			modeFlags,
@@ -447,7 +454,7 @@ export function readMessages(buf: ByteBuffer): Message[] {
 }
 
 export function writeMessage(buf: ByteBuffer, message: Message) {
-	buf.write8Unsigned(message.id);
+	buf.writeString(message.uuid);
 	buf.write4Unsigned(message.modeFlags);
 	//TODO 익명플레그 구현 결정하기
 	if (!(message.modeFlags & 4)) {
@@ -462,13 +469,13 @@ export function writeMessage(buf: ByteBuffer, message: Message) {
 }
 
 export function readMessage(buf: ByteBuffer): Message {
-	const id = buf.read8Unsigned();
+	const uuid = buf.readString();
 	const modeFlags = buf.read4Unsigned();
 	const accountUUID = buf.readUUID();
 	const content = buf.readString();
 	const timestamp = buf.readDate();
 	return ({
-		id,
+		uuid,
 		accountUUID,
 		content,
 		modeFlags,
@@ -601,7 +608,7 @@ export type RoomInfo = {
 	modeFlags: number;
 	password: string;
 	limit: number;
-	members: { account: RoomInfoAccount, modeFlags: number }[];
+	members: { account: RoomInfoAccount, modeFlags: number, lastMessageId: string }[];
 	messages?: RoomInfoMessage[];
 }
 
@@ -616,7 +623,7 @@ type RoomInfoAccount = {
 }
 
 type RoomInfoMessage = {
-	id: bigint,
+	uuid: string,
 	content: string,
 	timestamp: Date,
 	modeFlags: number,

@@ -67,12 +67,13 @@ export class ChatService {
 										statusMessage: true
 									}
 								},
-								modeFlags: true
+								modeFlags: true,
+								lastMessageId: true
 							},
 						},
 						messages: {
 							select: {
-								id: true,
+								uuid: true,
 								content: true,
 								timestamp: true,
 								modeFlags: true,
@@ -83,7 +84,7 @@ export class ChatService {
 								}
 							},
 							orderBy: {
-								id: 'desc'
+								timestamp: 'desc'
 							},
 						}
 					}
@@ -135,7 +136,8 @@ export class ChatService {
 			data: {
 				chatId,
 				accountId,
-				modeFlags
+				modeFlags,
+
 			}
 		}));
 	}

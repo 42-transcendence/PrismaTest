@@ -344,7 +344,7 @@ export class ChatSocket {
 		const msg = await this.chatService.createChatMessage(room.id, client.userId, msgInfo);
 		//소켓 연결중인 방 참여 인원에게 새로운 메세지 전달
 		const sendMsg: Message = {
-			id: msg.id,
+			uuid: msg.uuid,
 			accountUUID: client.account.uuid,
 			content: msg.content,
 			modeFlags: msg.modeFlags,
@@ -372,7 +372,8 @@ export class ChatSocket {
 		for (const member of room.members) {
 			members.push({
 				account: member.account,
-				modeFalgs: member.modeFlags
+				modeFalgs: member.modeFlags,
+				lastMessageId: member.lastMessageId
 			})
 		}
 		chatMembers.push({
@@ -383,7 +384,7 @@ export class ChatSocket {
 		if (room.messages) {
 			for (const message of room.messages) {
 				messages.push({
-					id: message.id,
+					uuid: message.uuid,
 					accountUUID: message.account.uuid,
 					content: message.content,
 					modeFlags: message.modeFlags,

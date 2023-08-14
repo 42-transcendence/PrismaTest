@@ -4,7 +4,7 @@ import {AccountEntity} from './account.entity'
 
 
 export class ChatMessageEntity {
-  id: bigint ;
+  uuid: string ;
 chat?: ChatEntity ;
 chatId: number ;
 account?: AccountEntity ;

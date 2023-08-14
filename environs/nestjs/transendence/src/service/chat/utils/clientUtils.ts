@@ -4,7 +4,7 @@ import { ChatOpCode, writeRoomJoinInfo, JoinCode, CreatCode, PartCode, KickCode,
 export function sendConnectMessage(client: WebSocket) {
 	const buf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.CONNECT);
 	const jwt = window.localStorage.getItem('access_token');
-	if (jwt != null)
+	if (jwt)
 		buf.writeString(jwt);
 	else
 		throw new Error('로그인 상태가 아닙니다.')
@@ -176,7 +176,7 @@ function setNowChatRoom(uuid: string) {
 
 //accept
 export function acceptConnect(client: WebSocket, buf: ByteBuffer) {
-	if (buf.readBoolean() == true) {
+	if (buf.readBoolean()) {
 		const sendBuf: ByteBuffer = ByteBuffer.createWithOpcode(ChatOpCode.INFO);
 		client.send(sendBuf.toArray());
 	}
