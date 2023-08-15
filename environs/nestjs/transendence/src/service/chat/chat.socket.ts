@@ -67,8 +67,8 @@ export class ChatSocket {
 			memberList.push(account.id);
 		}
 		//room & chatMemberCreate
-		await this.chatService.createChatMember(newRoom.id, client.userId, ChatMemberModeFlags.ADMIN);
-		await this.chatService.createChatMembers(newRoom.id, memberList, ChatMemberModeFlags.NORMAL)
+		await this.chatService.createChatMember(newRoom.id, client.userId, ChatMemberModeFlags.ADMIN, null);
+		await this.chatService.createChatMembers(newRoom.id, memberList, ChatMemberModeFlags.NORMAL, null)
 
 		//roomInformation추출
 		const roomInfo: RoomInfo | null = await this.chatService.getChatRoomWithoutMessages(newRoom.id);
@@ -117,7 +117,7 @@ export class ChatSocket {
 			return;
 		}
 		//chatMember create
-		await this.chatService.createChatMember(chatRoom.id, client.userId, ChatMemberModeFlags.NORMAL);
+		await this.chatService.createChatMember(chatRoom.id, client.userId, ChatMemberModeFlags.NORMAL, this.retLastmessageId(chatRoom.messages));
 		//RoomInfo find
 		const roomInfo: RoomInfo | null = await this.chatService.getChatRoomFromId(chatRoom.id);
 		if (!roomInfo) {
@@ -138,7 +138,7 @@ export class ChatSocket {
 		const otherMembers: string[] = []
 		for (let member of roomInfo.members) {
 			if (member.account.uuid == client.account.uuid) {
-				writeMemberWithModeFlags(sendNewJoinBuf, { account: member.account, modeFalgs: member.modeFlags })
+				writeMemberWithModeFlags(sendNewJoinBuf, { account: member.account, modeFalgs: member.modeFlags, lastMessageId : this.retLastmessageId(chatRoom.messages) })
 			}
 			else {
 				otherMembers.push(member.account.uuid);
@@ -166,6 +166,7 @@ export class ChatSocket {
 			throw new CustomException('채팅방이 존재하지 않습니다.');
 		if (client.getModeFlags(invitation.chatUUID) == ChatMemberModeFlags.NORMAL)
 			throw new CustomException('초대 권한이 없습니다.');
+		const lastMessageId = this.retLastmessageId(room.messages);
 		//기존 방 멤버들 목록
 		const nonInvitedMembers: string[] = [];
 		for (const member of room.members) {
@@ -185,7 +186,7 @@ export class ChatSocket {
 			memberList.push(account.id);
 		}
 		//chatMember add
-		await this.chatService.createChatMembers(room?.id, memberList, ChatMemberModeFlags.NORMAL)
+		await this.chatService.createChatMembers(room?.id, memberList, ChatMemberModeFlags.NORMAL, lastMessageId)
 		//roomInformation추출
 		const roomInfo: RoomInfo | null = await this.chatService.getChatRoomFromUUID(invitation.chatUUID);
 		if (!roomInfo) {
@@ -201,7 +202,8 @@ export class ChatSocket {
 			if (invitedMembers.includes(member.account.uuid)) {
 				const inviter: MemberWithModeFlags = {
 					account: member.account,
-					modeFalgs: member.modeFlags
+					modeFalgs: member.modeFlags,
+					lastMessageId: lastMessageId
 				};
 				invitedMembersWithModeFlags.push(inviter);
 			}
@@ -420,5 +422,15 @@ export class ChatSocket {
 		writeChatMembersList(buf, chatMembersList);
 		writeChatMessagesList(buf, chatMessagesList);
 		return buf;
+	}
+
+	private retLastmessageId(messages: {uuid:string}[]): string | null
+	{
+		const messageAt0 =  messages.at(0) 
+		if (messageAt0 == undefined)
+		{
+			return null;
+		}
+		return messageAt0.uuid;
 	}
 }

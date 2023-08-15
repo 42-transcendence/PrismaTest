@@ -313,20 +313,33 @@ export function readAccounts(buf: ByteBuffer): Account[] {
 export type MemberWithModeFlags = {
 	account: Account,
 	modeFalgs: number,
-	lastMessageId: string
+	lastMessageId: string | null
 }
 
 export function writeMemberWithModeFlags(buf: ByteBuffer, member: MemberWithModeFlags) {
 	writeAccount(buf, member.account);
 	buf.write4Unsigned(member.modeFalgs);
-	buf.writeUUID(member.lastMessageId);
+	const lastMessageId = member.lastMessageId;
+	if (lastMessageId != null)
+	{
+		buf.writeBoolean(true)
+		buf.writeUUID(lastMessageId);
+	}
+	else 
+	{
+		buf.writeBoolean(false);
+	}
 	return buf;
 }
 
 export function readMemberWithModeFlags(buf: ByteBuffer): MemberWithModeFlags {
 	const account: Account = readAccount(buf);
 	const modeFlags = buf.read4Unsigned();
-	const lastMessageId = buf.readUUID();
+	let lastMessageId: string | null = null;
+	if (buf.readBoolean() == true)
+	{
+		lastMessageId = buf.readUUID();
+	}
 	return ({
 		account: account,
 		modeFalgs: modeFlags,
@@ -340,7 +353,16 @@ export function writeMembersWithModeFlags(buf: ByteBuffer, members: MemberWithMo
 	for (let i = 0; i < members.length; i++) {
 		writeAccount(buf, members[i].account);
 		buf.write4Unsigned(members[i].modeFalgs);
-		buf.writeUUID(members[i].lastMessageId);
+		const lastMessageId = members[i].lastMessageId;
+		if (lastMessageId != null)
+		{
+			buf.writeBoolean(true);
+			buf.writeUUID(lastMessageId);
+		}
+		else
+		{
+			buf.writeBoolean(false);
+		}
 	}
 	return buf;
 }
@@ -351,7 +373,11 @@ export function readMembersWithModeFlags(buf: ByteBuffer): MemberWithModeFlags[]
 	for (let i = 0; i < size; i++) {
 		const account: Account = readAccount(buf);
 		const modeFlags = buf.read4Unsigned();
-		const lastMessageId = buf.readUUID();
+		let lastMessageId: string | null = null;
+		if (buf.readBoolean() == true)
+		{
+			lastMessageId = buf.readUUID();
+		}
 		members.push({
 			account: account,
 			modeFalgs: modeFlags,
@@ -608,7 +634,7 @@ export type RoomInfo = {
 	modeFlags: number;
 	password: string;
 	limit: number;
-	members: { account: RoomInfoAccount, modeFlags: number, lastMessageId: string }[];
+	members: { account: RoomInfoAccount, modeFlags: number, lastMessageId: string | null }[];
 	messages?: RoomInfoMessage[];
 }
 

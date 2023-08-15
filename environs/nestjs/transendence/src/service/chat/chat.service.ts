@@ -131,26 +131,27 @@ export class ChatService {
 		}));
 	}
 
-	async createChatMember(chatId: number, accountId: number, modeFlags: ChatMemberModeFlags) {
+	async createChatMember(chatId: number, accountId: number, modeFlags: ChatMemberModeFlags, lastMessageId: string | null) {
 		return (await this.prismaService.chatMember.create({
 			data: {
 				chatId,
 				accountId,
 				modeFlags,
+				lastMessageId
 			}
 		}));
 	}
 
-	private CreateChatMemberArray(chatRoomId: number, memberList: number[], modeFlags: ChatMemberModeFlags): ChatMemberEntity[] {
+	private CreateChatMemberArray(chatRoomId: number, memberList: number[], modeFlags: ChatMemberModeFlags, lastMessageId : string | null): ChatMemberEntity[] {
 		const arr: ChatMemberEntity[] = [];
 		for (let i of memberList)
-			arr.push({ chatId: chatRoomId, accountId: i, modeFlags: modeFlags });
+			arr.push({ chatId: chatRoomId, accountId: i, modeFlags: modeFlags, lastMessageId : lastMessageId});
 		return arr;
 	}
 
-	async createChatMembers(chatId: number, accountIds: number[], modeFlags: ChatMemberModeFlags) {
+	async createChatMembers(chatId: number, accountIds: number[], modeFlags: ChatMemberModeFlags, lastMessageId : string | null) {
 		return (await this.prismaService.chatMember.createMany({
-			data: this.CreateChatMemberArray(chatId, accountIds, modeFlags),
+			data: this.CreateChatMemberArray(chatId, accountIds, modeFlags, lastMessageId),
 		}));
 	}
 
@@ -178,7 +179,8 @@ export class ChatService {
 								statusMessage: true
 							}
 						},
-						modeFlags: true
+						modeFlags: true,
+						lastMessageId : true
 					}
 				},
 			}
@@ -188,7 +190,18 @@ export class ChatService {
 		return (await this.prismaService.chat.findUnique({
 			where: {
 				uuid: chatUUID,
-			}
+			},
+			include: {
+				messages:{
+					select: {
+						uuid : true
+					},
+					orderBy : {
+						timestamp: 'desc'
+					},
+					take : 1
+				}
+			}	
 		}));
 	}
 	async getChatRoomFromId(chatId: number): Promise<RoomInfo | null> {
@@ -215,12 +228,13 @@ export class ChatService {
 								statusMessage: true
 							}
 						},
-						modeFlags: true
+						modeFlags: true,
+						lastMessageId : true
 					}
 				},
 				messages: {
 					select: {
-						id: true,
+						uuid: true,
 						account: {
 							select: {
 								uuid: true
@@ -231,7 +245,7 @@ export class ChatService {
 						timestamp: true
 					},
 					orderBy: {
-						id: 'desc'
+						timestamp: 'desc'
 					}
 				}
 			}
@@ -263,11 +277,12 @@ export class ChatService {
 							}
 						},
 						modeFlags: true,
+						lastMessageId: true
 					},
 				},
 				messages: {
 					select: {
-						id: true,
+						uuid: true,
 						account: {
 							select: {
 								uuid: true,
@@ -278,7 +293,7 @@ export class ChatService {
 						modeFlags: true,
 					},
 					orderBy: {
-						id: 'desc'
+						timestamp: 'desc'
 					},
 				}
 			},
@@ -301,6 +316,15 @@ export class ChatService {
 							}
 						}
 					}
+				},
+				messages: {
+					select:{
+						uuid:true
+					},
+					orderBy : {
+						timestamp: 'desc'
+					},
+					take:1
 				}
 			}
 		}));

@@ -169,8 +169,52 @@ function deleteChatMessages(chatUUID: string) {
 	window.localStorage.setItem('chatMessagesList', JSON.stringify(chatMessagesList));
 }
 
-function setNowChatRoom(uuid: string) {
-	const nowChatRoom: NowChatRoom = makeNowChatRoom(uuid);
+function updateLastMessageId(chatUUID: string, accountUUID: string)
+{
+	const chatMembersList: ChatMembers[] = JSON.parse(String(window.localStorage.getItem('chatMembersList')));
+	const chatMessagesList: ChatMessages[] = JSON.parse(String(window.localStorage.getItem('chatMessagesList')));
+	let chatMessages: ChatMessages | null = null;
+	let lastMessageId:string | null = null;
+	for (const messages of chatMessagesList)
+	{
+		if (messages.chatUUID == chatUUID)
+		{
+			chatMessages = messages;
+			break;
+		}
+	}
+	if (chatMessages != null)
+	{
+		const messageAt0 = chatMessages.messages.at(0);
+		if (messageAt0 != undefined)
+		{
+			lastMessageId = messageAt0.uuid;
+		}
+	}
+	for (let i = 0; i < chatMembersList.length ; i++)
+	{
+		if (chatMembersList[i].chatUUID == chatUUID)
+		{
+			for (let j = 0; j < chatMembersList[i].members.length ; j++)
+			{
+				if (chatMembersList[i].members[j].account.uuid == accountUUID)
+				{
+					chatMembersList[i].members[j].lastMessageId = lastMessageId;
+					break;
+				}
+			}
+			break;
+		}
+	}
+	window.localStorage.setItem('chatMembersList', JSON.stringify(chatMembersList));
+}
+
+function setNowChatRoom(chatUUID: string, accountUUID?: string) {
+	if (accountUUID != undefined)
+	{
+		updateLastMessageId(chatUUID, accountUUID);
+	}
+	const nowChatRoom: NowChatRoom = makeNowChatRoom(chatUUID);
 	window.localStorage.setItem('nowChatRoom', JSON.stringify(nowChatRoom));
 }
 
@@ -328,7 +372,7 @@ export function accpetChat(buf: ByteBuffer) {
 	const msg: Message = readMessage(buf);
 	const nowChatRoom: NowChatRoom = JSON.parse(String(window.localStorage.getItem('nowChatRoom')));
 	addChatMessage(chatUUID, msg);
-	if (nowChatRoom.chatRoom?.uuid == chatUUID) {
+	if (nowChatRoom && nowChatRoom.chatRoom?.uuid == chatUUID) {
 		setNowChatRoom(chatUUID);
 	}
 }

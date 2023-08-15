@@ -10,6 +10,6 @@ chatId: number ;
 account?: AccountEntity ;
 accountId: number ;
 modeFlags: number ;
-lastMessage?: ChatMessageEntity ;
-lastMessageId: string ;
+lastMessage?: ChatMessageEntity  | null;
+lastMessageId: string  | null;
 }
